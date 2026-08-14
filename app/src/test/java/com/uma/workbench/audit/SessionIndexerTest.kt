@@ -41,7 +41,7 @@ class SessionIndexerTest {
 
     @Test fun indexesEveryArrayItemAndDeepField() {
         val array = (0 until 96).joinToString(",") { it.toString() }
-        val line = "{\"a\":{\"b\":{\"c\":{\"d\":{\"e\":{\"f\":{\"g\":{\"h\":{\"i\":\"deep\"}}}}}}}}},\"items\":[$array]}"
+        val line = "{\"a\":{\"b\":{\"c\":{\"d\":{\"e\":{\"f\":{\"g\":{\"h\":{\"i\":\"deep\"}}}}}}}},\"items\":[$array]}"
         val fields = SessionIndexer.parseScalars(line).associateBy { it.path }
         assertEquals("deep", fields["a.b.c.d.e.f.g.h.i"]?.value)
         assertEquals("95", fields["items[95]"]?.value)
