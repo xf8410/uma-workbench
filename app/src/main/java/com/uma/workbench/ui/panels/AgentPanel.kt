@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -16,6 +17,7 @@ import com.uma.workbench.data.ConversationEntity
 import com.uma.workbench.data.MessageEntity
 import com.uma.workbench.hlpatch.HlpatchClient
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable fun AgentPanel(
     conversations: List<ConversationEntity>,
     messages: List<MessageEntity>,
@@ -78,10 +80,11 @@ import com.uma.workbench.hlpatch.HlpatchClient
     }
 
     LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) listState.animateItemTo(messages.lastIndex)
+        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.lastIndex)
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun MessageBubble(msg: MessageEntity) {
     val isUser = msg.role == "user"
     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start) {

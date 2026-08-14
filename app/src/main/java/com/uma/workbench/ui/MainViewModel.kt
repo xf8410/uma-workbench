@@ -6,6 +6,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.uma.workbench.WorkbenchApplication
 import com.uma.workbench.data.*
+import com.uma.workbench.data.OpenTabEntity
+import com.uma.workbench.data.ProjectEntity
+import com.uma.workbench.data.RecentFileEntity
 import com.uma.workbench.hlpatch.HlpatchClient
 import com.uma.workbench.network.NetworkState
 import com.uma.workbench.workspace.WorkspaceManager
@@ -25,21 +28,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val workspaces = workspaceManager.observeWorkspaces().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     private val _currentWorkspaceId = MutableStateFlow<String?>(null)
     val currentWorkspace: StateFlow<WorkspaceEntity?> = _currentWorkspaceId.flatMapLatest { id ->
-        if (id == null) flowOf(null) else flow { emit(db.workspaces().get(id)) }
+        if (id == null) flowOf<WorkspaceEntity?>(null) else flow<WorkspaceEntity?> { emit(db.workspaces().get(id)) }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val projects = _currentWorkspaceId.flatMapLatest { id ->
-        if (id == null) flowOf(emptyList()) else workspaceManager.observeProjects(id)
+        if (id == null) flowOf(emptyList<ProjectEntity>()) else workspaceManager.observeProjects(id)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val recentFiles = _currentWorkspaceId.flatMapLatest { id ->
-        if (id == null) flowOf(emptyList()) else workspaceManager.observeRecentFiles(id)
+        if (id == null) flowOf(emptyList<RecentFileEntity>()) else workspaceManager.observeRecentFiles(id)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // ── 标签页 (051-054) ──
     val openTabs = _currentWorkspaceId.flatMapLatest { id ->
-        if (id == null) flowOf(emptyList()) else db.openTabs().observe(id)
+        if (id == null) flowOf(emptyList<OpenTabEntity>()) else db.openTabs().observe(id)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _activeTabId = MutableStateFlow<String?>(null)
@@ -52,7 +55,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val conversations = repository.conversations().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     private val _currentConversationId = MutableStateFlow<String?>(null)
     val messages = _currentConversationId.flatMapLatest { id ->
-        if (id == null) flowOf(emptyList()) else repository.messages(id)
+        if (id == null) flowOf(emptyList<MessageEntity>()) else repository.messages(id)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // ── 网络 & hlpatch (361-370) ──

@@ -6,15 +6,18 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.uma.workbench.data.OpenTabEntity
 import com.uma.workbench.ui.MainViewModel
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable fun ViewerPanel(
     tabs: List<OpenTabEntity>,
     activeTabId: String?,
@@ -56,6 +59,7 @@ import com.uma.workbench.ui.MainViewModel
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun FileViewer(tab: OpenTabEntity, content: String?, vm: MainViewModel) {
     var viewMode by remember { mutableStateOf("text") }
 
@@ -81,12 +85,14 @@ import com.uma.workbench.ui.MainViewModel
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun TextContent(text: String) {
     LazyColumn(Modifier.fillMaxSize().padding(8.dp)) {
         item { Text(text, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall) }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun JsonContent(text: String) {
     val formatted = remember(text) { runCatching { prettyPrintJson(text) }.getOrDefault(text) }
     LazyColumn(Modifier.fillMaxSize().padding(8.dp)) {
@@ -94,6 +100,7 @@ import com.uma.workbench.ui.MainViewModel
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun HexContent(text: String) {
     val hex = remember(text) {
         text.toByteArray().take(4096).joinToString("") { "%02x".format(it) }.chunked(32).mapIndexed { i, line ->

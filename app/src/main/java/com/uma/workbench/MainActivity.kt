@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -31,6 +32,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun WorkbenchApp(vm: MainViewModel = viewModel()) {
     val workspaces by vm.workspaces.collectAsStateWithLifecycle()
     val currentWs by vm.currentWorkspace.collectAsStateWithLifecycle()
@@ -44,6 +46,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun WorkspacePicker(workspaces: List<WorkspaceEntity>, vm: MainViewModel) {
     var showCreate by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }
@@ -86,6 +89,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun TraeLayout(vm: MainViewModel, ws: WorkspaceEntity, networkState: NetworkState, hlpatchState: HlpatchClient.ConnectionState) {
     var leftCollapsed by remember { mutableStateOf(false) }
     val projects by vm.projects.collectAsStateWithLifecycle()

@@ -11,7 +11,7 @@ class WorkbenchRepository(private val database: AppDatabase) {
     fun conversations(): Flow<List<ConversationEntity>> = database.conversations().observeAll(null)
     fun messages(conversationId: String): Flow<List<MessageEntity>> = database.messages().observe(conversationId)
     fun workItems(): Flow<List<WorkItemEntity>> = database.workItems().observeAll(null)
-    fun sources(): Flow<List<AuditSourceEntity>> = database.auditSources().observeAll()
+    fun sources(): Flow<List<AuditSourceEntity>> = database.auditSources().observeAll(null)
 
     suspend fun createConversation(title: String = "新对话"): String {
         val now = System.currentTimeMillis(); val id = UUID.randomUUID().toString()
