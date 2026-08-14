@@ -35,15 +35,15 @@ class AuditWorker(context: Context, params: WorkerParameters) : UmaWorker(contex
             return Result.success(workDataOf("workItemId" to id, "note" to "该类型暂未配置解析器"))
         }
         return try {
-            if (kind == SourceKind.IL2CPP_METADATA) indexIl2Cpp(db, id, sourceId, Uri.parse(source.uri), item.checkpoint)
-            else analyzeSinglePass(db, id, sourceId, source.name, kind, Uri.parse(source.uri))
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (security: SecurityException) {
-            fail(db, id, "BINARY_INDEX", "文件读取权限已失效：${security.message}")
-        } catch (invalid: IllegalArgumentException) {
-            fail(db, id, "BINARY_INDEX", "文件格式无效：${invalid.message}")
-        } catch (error: Exception) {
+            when (kind) {
+                SourceKind.IL2CPP_METADATA -> indexIl2Cpp(db, id, sourceId, Uri.parse(source.uri), item.checkpoint)
+                SourceKind.ARCHIVE -> indexArchive(db, id, sourceId, source.name, Uri.parse(source.uri), item.checkpoint)
+                else -> analyzeSinglePass(db, id, sourceId, source.name, kind, Uri.parse(source.uri))
+            }
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (security: SecurityException) { fail(db, id, "BINARY_INDEX", "文件读取权限已失效：${security.message}") }
+        catch (invalid: IllegalArgumentException) { fail(db, id, "BINARY_INDEX", "文件格式无效：${invalid.message}") }
+        catch (error: Exception) {
             if (runAttemptCount < 2) {
                 val current = db.workItems().get(id)
                 db.workItems().updateState(id, "RETRY_WAIT", current?.stage ?: "BINARY_INDEX", current?.progress ?: 0, current?.checkpoint, error.message, System.currentTimeMillis())
@@ -61,55 +61,70 @@ class AuditWorker(context: Context, params: WorkerParameters) : UmaWorker(contex
         return Result.success(workDataOf("workItemId" to id, "summary" to summary))
     }
 
+    private suspend fun indexArchive(db: AppDatabase, id: String, sourceId: String, name: String, uri: Uri, encodedCheckpoint: String?): Result {
+        require(name.endsWith(".zip", true)) { "Resumable entry indexing currently supports ZIP; TAR remains available as single-pass inventory" }
+        var checkpoint = ArchiveIndexer.Checkpoint.decode(encodedCheckpoint)
+        do {
+            currentCoroutineContext().ensureActive()
+            val batch = ArchiveIndexer.readZipBatch(sourceId, { open(uri) }, checkpoint)
+            db.withTransaction {
+                if (batch.entries.isNotEmpty()) db.archiveIndex().upsertEntries(batch.entries)
+                db.workItems().updateState(id, "RUNNING", "FILE_INDEX", if (batch.complete) 95 else 50, batch.checkpoint?.encode(), null, System.currentTimeMillis())
+            }
+            checkpoint = batch.checkpoint
+        } while (!batch.complete)
+        val count = db.archiveIndex().entryCount(sourceId)
+        val unsafe = db.archiveIndex().unsafeEntryCount(sourceId)
+        val expanded = db.archiveIndex().expandedBytes(sourceId)
+        val summary = "ZIP archive, indexedEntries=$count, expandedBytes=$expanded, unsafePaths=$unsafe"
+        db.withTransaction {
+            db.evidence().insert(EvidenceEntity(UUID.randomUUID().toString(), sourceId, name, offset = 0, summary = summary, confidence = "CONFIRMED", createdAt = System.currentTimeMillis()))
+            db.workItems().updateState(id, "COMPLETE", "SUMMARY", 100, null, null, System.currentTimeMillis())
+        }
+        return Result.success(workDataOf("workItemId" to id, "summary" to summary))
+    }
+
     private suspend fun indexIl2Cpp(db: AppDatabase, id: String, sourceId: String, uri: Uri, encodedCheckpoint: String?): Result {
         val analysis = open(uri).use { SourceAnalyzer().analyze(SourceKind.IL2CPP_METADATA, it) as Il2CppMetadataAnalysis }
         val sourceLength = applicationContext.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length.takeIf { length -> length >= 0 } }
         val validSections = Il2CppMetadataIndexer.validateSections(analysis, sourceLength)
         require(validSections.size == analysis.sections.size) { "IL2CPP metadata contains section ranges outside the source" }
         db.il2CppIndex().upsertSections(analysis.sections.map { Il2CppSectionEntity(sourceId, it.name, it.offset, it.byteCount, analysis.version, true) })
-
-        val indexSections = validSections.filter { it.byteCount > 0 }
+        val sections = validSections.filter { it.byteCount > 0 }
         var resume = Il2CppMetadataIndexer.Checkpoint.decode(encodedCheckpoint)
-        var startIndex = resume?.let { checkpoint -> indexSections.indexOfFirst { it.name == checkpoint.sectionName }.takeIf { it >= 0 } } ?: 0
-        if (startIndex < 0) startIndex = 0
-        val totalBytes = indexSections.sumOf { it.byteCount }.coerceAtLeast(1)
-
-        for (sectionIndex in startIndex until indexSections.size) {
-            val section = indexSections[sectionIndex]
-            var nextOffset = if (resume?.sectionName == section.name) resume!!.nextOffset else 0L
-            while (nextOffset < section.byteCount) {
+        var start = resume?.let { cp -> sections.indexOfFirst { it.name == cp.sectionName }.takeIf { it >= 0 } } ?: 0
+        if (start < 0) start = 0
+        val total = sections.sumOf { it.byteCount }.coerceAtLeast(1)
+        for (sectionIndex in start until sections.size) {
+            val section = sections[sectionIndex]
+            var next = if (resume?.sectionName == section.name) resume!!.nextOffset else 0L
+            while (next < section.byteCount) {
                 currentCoroutineContext().ensureActive()
-                val batch = Il2CppMetadataIndexer.readSectionBatch(sourceId, { open(uri) }, section, nextOffset)
-                val following = if (!batch.complete) batch.checkpoint else indexSections.getOrNull(sectionIndex + 1)?.let { Il2CppMetadataIndexer.Checkpoint(it.name, 0) }
-                val completedBytes = indexSections.take(sectionIndex).sumOf { it.byteCount } + nextOffset + batch.consumedBytes
-                val progress = (10 + completedBytes * 85 / totalBytes).toInt().coerceIn(10, 95)
+                val batch = Il2CppMetadataIndexer.readSectionBatch(sourceId, { open(uri) }, section, next)
+                val following = if (!batch.complete) batch.checkpoint else sections.getOrNull(sectionIndex + 1)?.let { Il2CppMetadataIndexer.Checkpoint(it.name, 0) }
+                val completed = sections.take(sectionIndex).sumOf { it.byteCount } + next + batch.consumedBytes
+                val progress = (10 + completed * 85 / total).toInt().coerceIn(10, 95)
                 db.withTransaction {
                     db.il2CppIndex().upsertSectionChunks(listOf(batch.chunk))
                     if (batch.fragments.isNotEmpty()) db.il2CppIndex().upsertStringFragments(batch.fragments)
                     db.workItems().updateState(id, "RUNNING", if (section.name in Il2CppMetadataIndexer.stringSectionNames) "TEXT_INDEX" else "BINARY_INDEX", progress, following?.encode(), null, System.currentTimeMillis())
                 }
-                nextOffset += batch.consumedBytes
+                next += batch.consumedBytes
             }
             resume = null
         }
-
-        val fragmentCount = db.il2CppIndex().stringFragmentCount(sourceId)
-        val chunkCount = db.il2CppIndex().sectionChunkCount(sourceId)
-        val summary = "IL2CPP global-metadata, version=${analysis.version}, sections=${analysis.nonEmptySectionCount}, verifiedChunks=$chunkCount, indexedStringFragments=$fragmentCount"
+        val fragments = db.il2CppIndex().stringFragmentCount(sourceId)
+        val chunks = db.il2CppIndex().sectionChunkCount(sourceId)
+        val summary = "IL2CPP global-metadata, version=${analysis.version}, sections=${analysis.nonEmptySectionCount}, verifiedChunks=$chunks, indexedStringFragments=$fragments"
         db.withTransaction {
-            db.evidence().insert(EvidenceEntity(id = UUID.randomUUID().toString(), sourceId = sourceId, path = "global-metadata.dat", offset = 0, summary = summary, confidence = "CONFIRMED", createdAt = System.currentTimeMillis()))
+            db.evidence().insert(EvidenceEntity(UUID.randomUUID().toString(), sourceId, "global-metadata.dat", offset = 0, summary = summary, confidence = "CONFIRMED", createdAt = System.currentTimeMillis()))
             db.workItems().updateState(id, "COMPLETE", "SUMMARY", 100, null, null, System.currentTimeMillis())
         }
         return Result.success(workDataOf("workItemId" to id, "summary" to summary))
     }
 
     private fun open(uri: Uri) = applicationContext.contentResolver.openInputStream(uri) ?: throw FileNotFoundException("无法打开来源")
-
-    private suspend fun fail(db: AppDatabase, id: String, stage: String, message: String): Result {
-        db.workItems().updateState(id, "FAILED", stage, 0, null, message.take(1000), System.currentTimeMillis())
-        return Result.failure(workDataOf("error" to message.take(1000)))
-    }
-
+    private suspend fun fail(db: AppDatabase, id: String, stage: String, message: String): Result { db.workItems().updateState(id, "FAILED", stage, 0, null, message.take(1000), System.currentTimeMillis()); return Result.failure(workDataOf("error" to message.take(1000))) }
     private fun analysisSummary(value: BinaryAnalysis?): String = when (value) {
         is ElfAnalysis -> "ELF ${if (value.is64Bit) 64 else 32}-bit, ${value.endian}-endian, machine=${value.machine}, type=${value.type}, entry=0x${value.entryPoint.toString(16)}"
         is SqliteAnalysis -> "SQLite 3, pageSize=${value.pageSize}, pageCount=${value.pageCount}, encoding=${value.textEncoding}, walHint=${value.isWalModeHint}"
@@ -117,12 +132,7 @@ class AuditWorker(context: Context, params: WorkerParameters) : UmaWorker(contex
         is ArchiveAnalysis -> "${value.archiveFormat} archive, entries=${value.entryCount}, files=${value.fileCount}, directories=${value.directoryCount}, expandedBytes=${value.expandedBytes}, unsafePaths=${value.unsafePathCount}"
         null -> "没有可用分析结果"
     }
-
-    private companion object {
-        val SUPPORTED_KINDS = setOf(SourceKind.SO, SourceKind.SQLITE, SourceKind.IL2CPP_METADATA, SourceKind.ARCHIVE)
-    }
+    private companion object { val SUPPORTED_KINDS = setOf(SourceKind.SO, SourceKind.SQLITE, SourceKind.IL2CPP_METADATA, SourceKind.ARCHIVE) }
 }
 
-class SyncWorker(context: Context, params: WorkerParameters) : UmaWorker(context, params) {
-    override suspend fun doWork(): Result = Result.success()
-}
+class SyncWorker(context: Context, params: WorkerParameters) : UmaWorker(context, params) { override suspend fun doWork(): Result = Result.success() }
