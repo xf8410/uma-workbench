@@ -3,7 +3,7 @@ package com.uma.workbench.worker
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import androidx.work.Result
+import androidx.work.workDataOf
 
 abstract class UmaWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     protected fun checkpoint(): String = inputData.getString("checkpoint") ?: "0"
@@ -11,15 +11,15 @@ abstract class UmaWorker(context: Context, params: WorkerParameters) : Coroutine
 
 class AuditWorker(context: Context, params: WorkerParameters) : UmaWorker(context, params) {
     override suspend fun doWork(): Result {
-        // Real scanners will consume one bounded source/stage per invocation.
-        // Checkpoints are deliberately persisted by the repository layer before each batch.
-        return Result.success()
+        val workItemId = inputData.getString("workItemId") ?: return Result.failure(workDataOf("error" to "缺少 workItemId"))
+        // Each implementation stage must write a checkpoint before returning.
+        return Result.success(workDataOf("workItemId" to workItemId, "checkpoint" to checkpoint()))
     }
 }
 
 class SyncWorker(context: Context, params: WorkerParameters) : UmaWorker(context, params) {
     override suspend fun doWork(): Result {
-        // Network changes are retryable, not fatal. Idempotency keys prevent duplicates.
-        return Result.success()
+        // Network constraints prevent normal offline execution; transient failures retry.
+        return Result.success(workDataOf("checkpoint" to checkpoint()))
     }
 }
