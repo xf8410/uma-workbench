@@ -16,6 +16,8 @@
 - IL2CPP `string`/`stringLiteralData` 分块文本索引
 - ZIP/TAR 魔数识别、流式归档清单、展开字节统计和路径逃逸检测（不执行、不落盘解压）
 - ZIP/TAR 每 200 条分批 Room 索引、格式化 entry checkpoint 恢复、分页查询和幂等重放
+- Session JSONL 原始行无损保存、顶层标量元数据提取、时间线索引、每 500 条 checkpoint 恢复和分页查询
+- 模型可选的本地智能体三层架构列入待办；云 API 不作为核心功能前置条件
 - 未支持来源使用 `UNSUPPORTED` 状态，不再伪装成 `COMPLETE`
 - GitHub 仓库/分支/Tag/Commit/Issue/PR/Actions/Artifact 契约
 - 仓库可见性读取、预览、确认变更和核验审计契约
@@ -33,9 +35,9 @@
 - 完整 SO ELF Section/符号/Build ID 解析
 - IL2CPP type/method/field/image/assembly 版本化实体布局和关联索引（原始区段已完整分块索引）
 - SQLite schema、Master/MetaMD5 解析器
-- Session 原始字段和时间线索引
+- Session 非 JSONL 容器格式、嵌套字段规范化和跨来源时间线关联
 - 多仓库去重扫描和证据关联
-- 真正的 AI Provider、流式响应和工具调用
+- 真正的可插拔本地 Agent/Model Provider
 - MemoryLoader 的 Room 实现与强制会话加载
 - SyncWorker 的真实幂等传输
 - 桌宠资源、动画和生命周期处理
