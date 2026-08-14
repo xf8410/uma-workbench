@@ -56,5 +56,5 @@ class MainActivity : ComponentActivity() { override fun onCreate(savedInstanceSt
     }
 }
 @Composable private fun HistoryPanel(vm: MainViewModel) { val tasks by vm.workItems.collectAsStateWithLifecycle(); LazyColumn(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { item { Text("任务与工具日志", style = MaterialTheme.typography.titleLarge) }; if (tasks.isEmpty()) item { Text("暂无任务") }; items(tasks, key = { it.id }) { Card(Modifier.fillMaxWidth()) { Text("${it.kind} · ${it.stage}\n${it.status} · ${it.progress}%", Modifier.padding(16.dp)) } } } }
-@Composable private fun GitHubPanel() { Text("GitHub 工作台\n\n仓库、分支、Tag、Commit、文件、Issue、PR、Actions、Workflow 和 Artifact。\n不提供 Token 生成页面；远程修改必须明确确认。", Modifier.padding(top = 24.dp)) }
+@Composable private fun GitHubPanel() { Text("GitHub 工作台\n\n仓库、分支、Tag、Commit、文件、Issue、PR、Actions、Workflow 和 Artifact。\n远程修改必须明确确认。", Modifier.padding(top = 24.dp)) }
 @Composable private fun SettingsPanel() { Text("设置\n\n语言：简体中文 / 繁體中文\n离线缓存 · 同步 · 诊断 · 桌宠 · GitHub 授权", Modifier.padding(top = 24.dp)) }

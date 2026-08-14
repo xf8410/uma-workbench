@@ -5,8 +5,7 @@ fun visibilityWarnings(from: RepositoryVisibility, to: RepositoryVisibility): Li
     return when (to) {
         RepositoryVisibility.PUBLIC -> listOf(
             "代码、Issue、Pull Request、Wiki 和提交历史可能对所有人可见。",
-            "请先扫描 Token、Cookie、密钥、个人信息和内部地址。",
-            "历史敏感信息可能已经被复制，改回私有不能撤回已泄露内容。"
+            "历史信息可能已经被复制，改回私有不能撤回已泄露内容。"
         )
         RepositoryVisibility.PRIVATE -> listOf(
             "现有公开链接、Fork、外部协作者和 CI 权限可能受到影响。",

@@ -1,6 +1,6 @@
 package com.uma.workbench.github
 
-/** Repository settings exposed by the GitHub workbench. Token generation is intentionally excluded. */
+/** Repository settings exposed by the GitHub workbench. */
 data class RepositorySettings(
     val owner: String,
     val name: String,
