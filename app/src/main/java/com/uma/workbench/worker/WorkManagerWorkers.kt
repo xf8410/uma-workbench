@@ -38,6 +38,7 @@ class AuditWorker(context: Context, params: WorkerParameters) : UmaWorker(contex
             when (kind) {
                 SourceKind.IL2CPP_METADATA -> indexIl2Cpp(db, id, sourceId, Uri.parse(source.uri), item.checkpoint)
                 SourceKind.ARCHIVE -> indexArchive(db, id, sourceId, source.name, Uri.parse(source.uri), item.checkpoint)
+                SourceKind.SESSION -> indexSession(db, id, sourceId, source.name, Uri.parse(source.uri), item.checkpoint)
                 else -> analyzeSinglePass(db, id, sourceId, source.name, kind, Uri.parse(source.uri))
             }
         } catch (cancelled: CancellationException) { throw cancelled }
@@ -58,6 +59,27 @@ class AuditWorker(context: Context, params: WorkerParameters) : UmaWorker(contex
         val summary = analysisSummary(analysis)
         db.evidence().insert(EvidenceEntity(UUID.randomUUID().toString(), sourceId, name, offset = 0, summary = summary, confidence = "CONFIRMED", createdAt = System.currentTimeMillis()))
         db.workItems().updateState(id, "COMPLETE", "SUMMARY", 100, "evidence", null, System.currentTimeMillis())
+        return Result.success(workDataOf("workItemId" to id, "summary" to summary))
+    }
+
+    private suspend fun indexSession(db: AppDatabase, id: String, sourceId: String, name: String, uri: Uri, encodedCheckpoint: String?): Result {
+        var checkpoint = SessionIndexer.Checkpoint.decode(encodedCheckpoint)
+        do {
+            currentCoroutineContext().ensureActive()
+            val batch = SessionIndexer.readBatch(sourceId, { open(uri) }, checkpoint)
+            db.withTransaction {
+                if (batch.records.isNotEmpty()) db.sessionIndex().upsertRecords(batch.records)
+                db.workItems().updateState(id, "RUNNING", "TIMELINE_INDEX", if (batch.complete) 95 else 50, batch.checkpoint?.encode(), null, System.currentTimeMillis())
+            }
+            checkpoint = batch.checkpoint
+        } while (!batch.complete)
+        val count = db.sessionIndex().recordCount(sourceId)
+        val malformed = db.sessionIndex().malformedCount(sourceId)
+        val summary = "Session JSONL, indexedRecords=$count, malformedRecords=$malformed"
+        db.withTransaction {
+            db.evidence().insert(EvidenceEntity(UUID.randomUUID().toString(), sourceId, name, offset = 0, summary = summary, confidence = "CONFIRMED", createdAt = System.currentTimeMillis()))
+            db.workItems().updateState(id, "COMPLETE", "SUMMARY", 100, null, null, System.currentTimeMillis())
+        }
         return Result.success(workDataOf("workItemId" to id, "summary" to summary))
     }
 
@@ -135,7 +157,7 @@ class AuditWorker(context: Context, params: WorkerParameters) : UmaWorker(contex
         is ArchiveAnalysis -> "${value.archiveFormat} archive, entries=${value.entryCount}, files=${value.fileCount}, directories=${value.directoryCount}, expandedBytes=${value.expandedBytes}, unsafePaths=${value.unsafePathCount}"
         null -> "没有可用分析结果"
     }
-    private companion object { val SUPPORTED_KINDS = setOf(SourceKind.SO, SourceKind.SQLITE, SourceKind.IL2CPP_METADATA, SourceKind.ARCHIVE) }
+    private companion object { val SUPPORTED_KINDS = setOf(SourceKind.SO, SourceKind.SQLITE, SourceKind.IL2CPP_METADATA, SourceKind.ARCHIVE, SourceKind.SESSION) }
 }
 
 class SyncWorker(context: Context, params: WorkerParameters) : UmaWorker(context, params) { override suspend fun doWork(): Result = Result.success() }
