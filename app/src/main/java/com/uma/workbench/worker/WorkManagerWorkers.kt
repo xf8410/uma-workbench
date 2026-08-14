@@ -97,7 +97,15 @@ class AuditWorker(context: Context, params: WorkerParameters) : UmaWorker(contex
         val fragmentCount = db.il2CppIndex().stringFragmentCount(sourceId)
         val summary = "IL2CPP global-metadata, version=${analysis.version}, sections=${analysis.nonEmptySectionCount}, indexedStringFragments=$fragmentCount"
         db.withTransaction {
-            db.evidence().insert(EvidenceEntity(UUID.randomUUID().toString(), sourceId, "global-metadata.dat", 0, summary, "CONFIRMED", System.currentTimeMillis()))
+            db.evidence().insert(EvidenceEntity(
+                id = UUID.randomUUID().toString(),
+                sourceId = sourceId,
+                path = "global-metadata.dat",
+                offset = 0,
+                summary = summary,
+                confidence = "CONFIRMED",
+                createdAt = System.currentTimeMillis()
+            ))
             db.workItems().updateState(id, "COMPLETE", "SUMMARY", 100, null, null, System.currentTimeMillis())
         }
         return Result.success(workDataOf("workItemId" to id, "summary" to summary))
