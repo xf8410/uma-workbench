@@ -13,5 +13,8 @@ fun diagnosticReport(taskId: String?, stage: String?, event: String?, code: Stri
     stage,
     event,
     code,
-    message?.replace(Regex("(?i)(token|cookie|authorization|password)=?[^\\s,;]+"), "$1=[REDACTED]")
+    message?.replace(
+        Regex("(?i)(token|cookie|authorization|password)=?[^\\s,;]+"),
+        "\$1=[REDACTED]"
+    )
 )
