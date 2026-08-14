@@ -42,6 +42,20 @@ data class Il2CppMetadataAnalysis(
     val nonEmptySectionCount: Int get() = sections.count { it.byteCount > 0 }
 }
 
+data class ArchiveAnalysis(
+    val archiveFormat: String,
+    val entryCount: Long,
+    val fileCount: Long,
+    val directoryCount: Long,
+    val expandedBytes: Long,
+    val declaredCompressedBytes: Long?,
+    val unsafePathCount: Long,
+    val entryNamePreview: List<String>,
+    override val warnings: List<String> = emptyList()
+) : BinaryAnalysis {
+    override val format: String = "ARCHIVE"
+}
+
 object BinaryAnalyzers {
     private const val IL2CPP_MAGIC = 0xFAB11BAF.toInt()
 
