@@ -66,28 +66,27 @@ class AuditWorker(context: Context, params: WorkerParameters) : UmaWorker(contex
         val sourceLength = applicationContext.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length.takeIf { length -> length >= 0 } }
         val validSections = Il2CppMetadataIndexer.validateSections(analysis, sourceLength)
         require(validSections.size == analysis.sections.size) { "IL2CPP metadata contains section ranges outside the source" }
-        db.il2CppIndex().upsertSections(analysis.sections.map {
-            Il2CppSectionEntity(sourceId, it.name, it.offset, it.byteCount, analysis.version, rangeValid = true)
-        })
+        db.il2CppIndex().upsertSections(analysis.sections.map { Il2CppSectionEntity(sourceId, it.name, it.offset, it.byteCount, analysis.version, true) })
 
-        val indexSections = Il2CppMetadataIndexer.indexedSectionNames.mapNotNull { name -> validSections.firstOrNull { it.name == name && it.byteCount > 0 } }
+        val indexSections = validSections.filter { it.byteCount > 0 }
         var resume = Il2CppMetadataIndexer.Checkpoint.decode(encodedCheckpoint)
         var startIndex = resume?.let { checkpoint -> indexSections.indexOfFirst { it.name == checkpoint.sectionName }.takeIf { it >= 0 } } ?: 0
         if (startIndex < 0) startIndex = 0
+        val totalBytes = indexSections.sumOf { it.byteCount }.coerceAtLeast(1)
 
         for (sectionIndex in startIndex until indexSections.size) {
             val section = indexSections[sectionIndex]
             var nextOffset = if (resume?.sectionName == section.name) resume!!.nextOffset else 0L
             while (nextOffset < section.byteCount) {
                 currentCoroutineContext().ensureActive()
-                val batch = Il2CppMetadataIndexer.readBatch(sourceId, { open(uri) }, section, nextOffset)
+                val batch = Il2CppMetadataIndexer.readSectionBatch(sourceId, { open(uri) }, section, nextOffset)
                 val following = if (!batch.complete) batch.checkpoint else indexSections.getOrNull(sectionIndex + 1)?.let { Il2CppMetadataIndexer.Checkpoint(it.name, 0) }
                 val completedBytes = indexSections.take(sectionIndex).sumOf { it.byteCount } + nextOffset + batch.consumedBytes
-                val totalBytes = indexSections.sumOf { it.byteCount }.coerceAtLeast(1)
                 val progress = (10 + completedBytes * 85 / totalBytes).toInt().coerceIn(10, 95)
                 db.withTransaction {
+                    db.il2CppIndex().upsertSectionChunks(listOf(batch.chunk))
                     if (batch.fragments.isNotEmpty()) db.il2CppIndex().upsertStringFragments(batch.fragments)
-                    db.workItems().updateState(id, "RUNNING", "TEXT_INDEX", progress, following?.encode(), null, System.currentTimeMillis())
+                    db.workItems().updateState(id, "RUNNING", if (section.name in Il2CppMetadataIndexer.stringSectionNames) "TEXT_INDEX" else "BINARY_INDEX", progress, following?.encode(), null, System.currentTimeMillis())
                 }
                 nextOffset += batch.consumedBytes
             }
@@ -95,17 +94,10 @@ class AuditWorker(context: Context, params: WorkerParameters) : UmaWorker(contex
         }
 
         val fragmentCount = db.il2CppIndex().stringFragmentCount(sourceId)
-        val summary = "IL2CPP global-metadata, version=${analysis.version}, sections=${analysis.nonEmptySectionCount}, indexedStringFragments=$fragmentCount"
+        val chunkCount = db.il2CppIndex().sectionChunkCount(sourceId)
+        val summary = "IL2CPP global-metadata, version=${analysis.version}, sections=${analysis.nonEmptySectionCount}, verifiedChunks=$chunkCount, indexedStringFragments=$fragmentCount"
         db.withTransaction {
-            db.evidence().insert(EvidenceEntity(
-                id = UUID.randomUUID().toString(),
-                sourceId = sourceId,
-                path = "global-metadata.dat",
-                offset = 0,
-                summary = summary,
-                confidence = "CONFIRMED",
-                createdAt = System.currentTimeMillis()
-            ))
+            db.evidence().insert(EvidenceEntity(id = UUID.randomUUID().toString(), sourceId = sourceId, path = "global-metadata.dat", offset = 0, summary = summary, confidence = "CONFIRMED", createdAt = System.currentTimeMillis()))
             db.workItems().updateState(id, "COMPLETE", "SUMMARY", 100, null, null, System.currentTimeMillis())
         }
         return Result.success(workDataOf("workItemId" to id, "summary" to summary))
