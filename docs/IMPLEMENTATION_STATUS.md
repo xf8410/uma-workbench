@@ -11,6 +11,8 @@
 - Content URI 分块读取和 SHA-256 指纹
 - 文件选择器接入，来源入库，SHA-256 重复检测和审计队列
 - SO ELF 头部和 SQLite 3 头部有界分析器
+- IL2CPP global-metadata 魔数、版本和区段描述符头部解析
+- 未支持来源使用 `UNSUPPORTED` 状态，不再伪装成 `COMPLETE`
 - GitHub 仓库/分支/Tag/Commit/Issue/PR/Actions/Artifact 契约
 - 仓库可见性读取、预览、确认变更和核验审计契约
 - Agent 主控/子任务边界
@@ -24,7 +26,8 @@
 - GitHub 设置页面及二次确认流程
 - 原始归档保存和断点导入
 - 完整 SO ELF Section/符号/Build ID 解析
-- IL2CPP metadata、SQLite schema、Master/MetaMD5 解析器
+- IL2CPP metadata 全量实体解析和分块索引
+- SQLite schema、Master/MetaMD5 解析器
 - 多仓库去重扫描和证据关联
 - 真正的 AI Provider、流式响应和工具调用
 - MemoryLoader 的 Room 实现与强制会话加载
