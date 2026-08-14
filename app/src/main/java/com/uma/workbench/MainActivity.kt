@@ -2,9 +2,7 @@ package com.uma.workbench
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -12,49 +10,169 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.uma.workbench.data.WorkspaceEntity
+import com.uma.workbench.hlpatch.HlpatchClient
 import com.uma.workbench.network.NetworkState
 import com.uma.workbench.ui.MainViewModel
+import com.uma.workbench.ui.panels.AgentPanel
+import com.uma.workbench.ui.panels.ProjectTreePanel
+import com.uma.workbench.ui.panels.ViewerPanel
 
-private enum class Tab(val title: String) { Chat("对话"), Audit("审计"), History("历史"), GitHub("GitHub"), Settings("设置") }
-class MainActivity : ComponentActivity() { override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); setContent { MaterialTheme { WorkbenchApp() } } } }
-
-@Composable private fun WorkbenchApp(vm: MainViewModel = viewModel()) {
-    var tab by remember { mutableStateOf(Tab.Chat) }; val network by vm.network.collectAsStateWithLifecycle()
-    Scaffold(bottomBar = { NavigationBar { Tab.entries.forEach { item ->
-        val icon = when (item) { Tab.Chat -> Icons.Default.Chat; Tab.Audit -> Icons.Default.Folder; Tab.History -> Icons.Default.History; Tab.GitHub -> Icons.Default.Cloud; Tab.Settings -> Icons.Default.Settings }
-        NavigationBarItem(tab == item, { tab = item }, { Icon(icon, item.title) }, label = { Text(item.title) })
-    } } }) { padding -> Column(Modifier.fillMaxSize().padding(padding)) { NetworkBanner(network); Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) { Text("UMA Workbench", style = MaterialTheme.typography.headlineSmall); when (tab) { Tab.Chat -> ChatPanel(vm); Tab.Audit -> AuditPanel(vm); Tab.History -> HistoryPanel(vm); Tab.GitHub -> GitHubPanel(); Tab.Settings -> SettingsPanel() } } } }
-}
-@Composable private fun NetworkBanner(state: NetworkState) { if (state == NetworkState.ONLINE) return; Surface(color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth()) { Text(if (state == NetworkState.OFFLINE) "当前离线：消息和任务已保存在本地，联网后继续" else "网络切换中：当前进度已保存", Modifier.padding(8.dp)) } }
-
-@Composable private fun ChatPanel(vm: MainViewModel) {
-    var input by remember { mutableStateOf("") }; val conversations by vm.conversations.collectAsStateWithLifecycle(); val selected by vm.selectedConversationId.collectAsStateWithLifecycle(); val messages by vm.messages.collectAsStateWithLifecycle()
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxSize().padding(top = 12.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("对话 ${conversations.size}", style = MaterialTheme.typography.titleLarge); Button(vm::createConversation) { Text("新建") } }
-        if (conversations.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) { conversations.take(4).forEach { item -> FilterChip(selected == item.id, { vm.selectConversation(item.id) }, { Text(item.title) }) } }
-        Card(Modifier.fillMaxWidth()) { Text("项目规则和相关记忆由应用强制加载；加载失败时必须明确提示。", Modifier.padding(12.dp)) }
-        LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) { if (messages.isEmpty()) item { Text("暂无消息。断网时发送的内容会进入本地待同步队列。") }; items(messages, key = { it.id }) { message -> Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp)) { Text(if (message.role == "USER") "你" else "助手", style = MaterialTheme.typography.labelMedium); Text(message.content); if (message.status != "COMPLETE") Text(message.status, style = MaterialTheme.typography.labelSmall) } } } }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { OutlinedTextField(input, { input = it }, Modifier.weight(1f), placeholder = { Text("输入消息") }); Button(onClick = { vm.send(input); input = "" }, enabled = input.isNotBlank()) { Text("发送") } }
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent { WorkbenchTheme { WorkbenchApp() } }
     }
 }
 
-@Composable private fun AuditPanel(vm: MainViewModel) {
-    val sources by vm.sources.collectAsStateWithLifecycle(); val status by vm.importStatus.collectAsStateWithLifecycle()
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments(), vm::importDocuments)
-    Column(Modifier.fillMaxSize().padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("项目审计", style = MaterialTheme.typography.titleLarge); Button({ picker.launch(arrayOf("application/octet-stream", "application/zip", "application/x-sqlite3", "*/*")) }) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(6.dp)); Text("导入文件") } }
-        Text("支持 SO、IL2CPP metadata、SQLite、Master、归档和会话文件；导入时分块计算 SHA-256。")
-        status?.let { AssistChip({}, { Text(it) }) }
-        LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (sources.isEmpty()) item { Text("尚未导入审计来源") }
-            items(sources, key = { it.id }) { source -> Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(14.dp)) { Text(source.name, style = MaterialTheme.typography.titleMedium); Text("${source.kind} · ${source.sha256?.take(16) ?: "待计算"}"); source.duplicateOf?.let { Text("疑似重复来源：$it", color = MaterialTheme.colorScheme.tertiary) } } } }
+@Composable private fun WorkbenchApp(vm: MainViewModel = viewModel()) {
+    val workspaces by vm.workspaces.collectAsStateWithLifecycle()
+    val currentWs by vm.currentWorkspace.collectAsStateWithLifecycle()
+    val networkState by vm.networkState.collectAsStateWithLifecycle()
+    val hlpatchState by vm.hlpatchState.collectAsStateWithLifecycle()
+
+    if (currentWs == null) {
+        WorkspacePicker(workspaces, vm)
+    } else {
+        TraeLayout(vm, currentWs!!, networkState, hlpatchState)
+    }
+}
+
+@Composable private fun WorkspacePicker(workspaces: List<WorkspaceEntity>, vm: MainViewModel) {
+    var showCreate by remember { mutableStateOf(false) }
+    var newName by remember { mutableStateOf("") }
+
+    Scaffold(topBar = { TopAppBar(title = { Text("UMA Workbench") }) }) { padding ->
+        Column(Modifier.padding(padding).fillMaxSize().padding(16.dp)) {
+            Text("工作区", style = MaterialTheme.typography.headlineMedium)
+            Spacer(Modifier.height(8.dp))
+            Text("选择或创建工作区开始工作", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(16.dp))
+
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
+                items(workspaces, key = { it.id }) { ws ->
+                    Card(onClick = { vm.openWorkspace(ws.id) }, modifier = Modifier.fillMaxWidth()) {
+                        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Folder, contentDescription = null)
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(ws.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text("创建于 ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.CHINA).format(java.util.Date(ws.createdAt))}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            if (ws.pinned) Icon(Icons.Default.Star, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
+            }
+
+            if (showCreate) {
+                AlertDialog(
+                    onDismissRequest = { showCreate = false; newName = "" },
+                    title = { Text("新建工作区") },
+                    text = { OutlinedTextField(value = newName, onValueChange = { newName = it }, label = { Text("工作区名称") }, singleLine = true) },
+                    confirmButton = { TextButton(onClick = { if (newName.isNotBlank()) { vm.createWorkspace(newName); newName = ""; showCreate = false } }) { Text("创建") } },
+                    dismissButton = { TextButton(onClick = { showCreate = false; newName = "" }) { Text("取消") } }
+                )
+            }
+
+            FloatingActionButton(onClick = { showCreate = true }) { Icon(Icons.Default.Add, contentDescription = "新建工作区") }
         }
     }
 }
-@Composable private fun HistoryPanel(vm: MainViewModel) { val tasks by vm.workItems.collectAsStateWithLifecycle(); LazyColumn(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { item { Text("任务与工具日志", style = MaterialTheme.typography.titleLarge) }; if (tasks.isEmpty()) item { Text("暂无任务") }; items(tasks, key = { it.id }) { Card(Modifier.fillMaxWidth()) { Text("${it.kind} · ${it.stage}\n${it.status} · ${it.progress}%", Modifier.padding(16.dp)) } } } }
-@Composable private fun GitHubPanel() { Text("GitHub 工作台\n\n仓库、分支、Tag、Commit、文件、Issue、PR、Actions、Workflow 和 Artifact。\n远程修改必须明确确认。", Modifier.padding(top = 24.dp)) }
-@Composable private fun SettingsPanel() { Text("设置\n\n语言：简体中文 / 繁體中文\n离线缓存 · 同步 · 诊断 · 桌宠 · GitHub 授权", Modifier.padding(top = 24.dp)) }
+
+@Composable private fun TraeLayout(vm: MainViewModel, ws: WorkspaceEntity, networkState: NetworkState, hlpatchState: HlpatchClient.ConnectionState) {
+    var leftCollapsed by remember { mutableStateOf(false) }
+    val projects by vm.projects.collectAsStateWithLifecycle()
+    val recentFiles by vm.recentFiles.collectAsStateWithLifecycle()
+    val openTabs by vm.openTabs.collectAsStateWithLifecycle()
+    val activeTabId by vm.activeTabId.collectAsStateWithLifecycle()
+    val conversations by vm.conversations.collectAsStateWithLifecycle()
+    val messages by vm.messages.collectAsStateWithLifecycle()
+
+    Row(Modifier.fillMaxSize()) {
+        // 左栏：项目树
+        if (!leftCollapsed) {
+            ProjectTreePanel(
+                workspace = ws,
+                projects = projects,
+                recentFiles = recentFiles,
+                onOpenFile = { uri, name -> vm.openFile(uri, name) },
+                onAddProject = { name, uri -> vm.addProject(name, uri) },
+                onBack = { vm.closeWorkspace() },
+                modifier = Modifier.width(280.dp).fillMaxHeight()
+            )
+        }
+
+        Column(Modifier.weight(1f).fillMaxHeight()) {
+            // 顶栏
+            Surface(tonalElevation = 2.dp) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { leftCollapsed = !leftCollapsed }) { Icon(if (leftCollapsed) Icons.Default.Menu else Icons.Default.ChevronLeft, contentDescription = "切换左栏") }
+                    Text(ws.name, style = MaterialTheme.typography.titleMedium)
+                    Spacer(Modifier.weight(1f))
+                    HlpatchStatusBadge(hlpatchState)
+                    Spacer(Modifier.width(8.dp))
+                    NetworkBadge(networkState)
+                }
+            }
+
+            // 中栏：查看器
+            ViewerPanel(
+                tabs = openTabs,
+                activeTabId = activeTabId,
+                onSelectTab = { vm.selectTab(it) },
+                onCloseTab = { vm.closeTab(it) },
+                vm = vm,
+                modifier = Modifier.weight(1f).fillMaxWidth()
+            )
+        }
+
+        // 右栏：Agent
+        AgentPanel(
+            conversations = conversations,
+            messages = messages,
+            onSendMessage = { msg -> vm.sendAgentMessage(msg) },
+            onNewConversation = { vm.newConversation() },
+            hlpatchState = hlpatchState,
+            onHlpatchConnect = { vm.connectHlpatch() },
+            modifier = Modifier.width(320.dp).fillMaxHeight()
+        )
+    }
+}
+
+@Composable private fun HlpatchStatusBadge(state: HlpatchClient.ConnectionState) {
+    val (color, text) = when (state) {
+        HlpatchClient.ConnectionState.READY -> MaterialTheme.colorScheme.primary to "hlpatch 就绪"
+        HlpatchClient.ConnectionState.CONNECTING -> MaterialTheme.colorScheme.tertiary to "连接中…"
+        HlpatchClient.ConnectionState.DEGRADED -> MaterialTheme.colorScheme.error to "hlpatch 降级"
+        HlpatchClient.ConnectionState.OVERLOADED -> MaterialTheme.colorScheme.error to "hlpatch 过载"
+        HlpatchClient.ConnectionState.INCOMPATIBLE -> MaterialTheme.colorScheme.error to "hlpatch 不兼容"
+        HlpatchClient.ConnectionState.DISCONNECTED -> MaterialTheme.colorScheme.outline to "hlpatch 未连接"
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Surface(color = color.copy(alpha = 0.15f), shape = MaterialTheme.shapes.small) {
+            Text(text, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall, color = color)
+        }
+    }
+}
+
+@Composable private fun NetworkBadge(state: NetworkState) {
+    val (color, text) = when (state) {
+        NetworkState.ONLINE -> MaterialTheme.colorScheme.primary to "在线"
+        NetworkState.SWITCHING -> MaterialTheme.colorScheme.tertiary to "切换中…"
+        NetworkState.OFFLINE -> MaterialTheme.colorScheme.outline to "离线"
+    }
+    Surface(color = color.copy(alpha = 0.15f), shape = MaterialTheme.shapes.small) {
+        Text(text, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall, color = color)
+    }
+}
+
+@Composable fun WorkbenchTheme(content: @Composable () -> Unit) {
+    MaterialTheme(colorScheme = darkColorScheme(), content = content)
+}
