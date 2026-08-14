@@ -46,15 +46,18 @@ import kotlinx.coroutines.flow.Flow
 }
 @Dao interface Il2CppIndexDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertSections(values: List<Il2CppSectionEntity>)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertSectionChunks(values: List<Il2CppSectionChunkEntity>)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertStringFragments(values: List<Il2CppStringFragmentEntity>)
     @Query("SELECT * FROM il2cpp_sections WHERE sourceId = :sourceId ORDER BY offset") suspend fun sections(sourceId: String): List<Il2CppSectionEntity>
+    @Query("SELECT * FROM il2cpp_section_chunks WHERE sourceId = :sourceId AND sectionName = :sectionName ORDER BY sectionOffset LIMIT :limit OFFSET :offset") suspend fun sectionChunks(sourceId: String, sectionName: String, offset: Int, limit: Int): List<Il2CppSectionChunkEntity>
     @Query("SELECT * FROM il2cpp_string_fragments WHERE sourceId = :sourceId ORDER BY offset LIMIT :limit OFFSET :offset") suspend fun stringFragments(sourceId: String, offset: Int, limit: Int): List<Il2CppStringFragmentEntity>
+    @Query("SELECT COUNT(*) FROM il2cpp_section_chunks WHERE sourceId = :sourceId") suspend fun sectionChunkCount(sourceId: String): Long
     @Query("SELECT COUNT(*) FROM il2cpp_string_fragments WHERE sourceId = :sourceId") suspend fun stringFragmentCount(sourceId: String): Long
 }
 
 @Database(
-    entities = [ConversationEntity::class, MessageEntity::class, WorkItemEntity::class, AuditSourceEntity::class, EvidenceEntity::class, SyncQueueEntity::class, GitHubRepositoryEntity::class, Il2CppSectionEntity::class, Il2CppStringFragmentEntity::class],
-    version = 2,
+    entities = [ConversationEntity::class, MessageEntity::class, WorkItemEntity::class, AuditSourceEntity::class, EvidenceEntity::class, SyncQueueEntity::class, GitHubRepositoryEntity::class, Il2CppSectionEntity::class, Il2CppSectionChunkEntity::class, Il2CppStringFragmentEntity::class],
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -76,10 +79,17 @@ abstract class AppDatabase : RoomDatabase() {
                 database.execSQL("CREATE INDEX IF NOT EXISTS `index_il2cpp_string_fragments_sourceId_text` ON `il2cpp_string_fragments` (`sourceId`, `text`)")
             }
         }
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("CREATE TABLE IF NOT EXISTS `il2cpp_section_chunks` (`sourceId` TEXT NOT NULL, `sectionName` TEXT NOT NULL, `sectionOffset` INTEGER NOT NULL, `absoluteOffset` INTEGER NOT NULL, `byteCount` INTEGER NOT NULL, `sha256` TEXT NOT NULL, PRIMARY KEY(`sourceId`, `sectionName`, `sectionOffset`))")
+                database.execSQL("CREATE INDEX IF NOT EXISTS `index_il2cpp_section_chunks_sourceId_sectionName` ON `il2cpp_section_chunks` (`sourceId`, `sectionName`)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS `index_il2cpp_section_chunks_sourceId_absoluteOffset` ON `il2cpp_section_chunks` (`sourceId`, `absoluteOffset`)")
+            }
+        }
         @Volatile private var instance: AppDatabase? = null
         fun get(context: Context): AppDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "uma-workbench.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
                 .also { instance = it }
         }
