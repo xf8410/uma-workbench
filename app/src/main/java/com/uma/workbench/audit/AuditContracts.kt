@@ -6,6 +6,7 @@ enum class Usability { RUNNABLE, BUILDABLE_PARTIAL, REPAIR_REQUIRED, SOURCE_ONLY
 enum class Freshness { CURRENT, PROBABLY_CURRENT, HISTORICAL, UNKNOWN, OBSOLETE, CONFLICTING }
 enum class FindingConfidence { CLUE, CANDIDATE, PARTIALLY_CONFIRMED, CONFIRMED, REJECTED }
 
+data class AuditBudget(val maxFiles: Int = 500, val maxSingleFileBytes: Long = 8L * 1024 * 1024, val maxRuntimeSeconds: Long = 300)
 data class RepositoryIdentity(val fullName: String, val purpose: String?, val languages: Set<String>, val defaultBranch: String, val maintenance: Maintenance, val usability: Usability, val freshness: Freshness, val forkOf: String?, val duplicateOf: String?)
 data class AuditFinding(val sourceId: String, val kind: String, val title: String, val evidencePath: String?, val confidence: FindingConfidence, val version: String?, val summary: String)
 data class AuditCheckpoint(val sourceId: String, val stage: String, val cursor: String?, val scannedFiles: Int, val findings: Int)
