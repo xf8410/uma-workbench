@@ -62,11 +62,12 @@ class AuditWorker(context: Context, params: WorkerParameters) : UmaWorker(contex
             "IL2CPP global-metadata, version=${value.version}, sections=${value.nonEmptySectionCount}" +
                 if (keySections.isEmpty()) "" else ", $keySections"
         }
+        is ArchiveAnalysis -> "${value.archiveFormat} archive, entries=${value.entryCount}, files=${value.fileCount}, directories=${value.directoryCount}, expandedBytes=${value.expandedBytes}, unsafePaths=${value.unsafePathCount}"
         null -> "没有可用分析结果"
     }
 
     private companion object {
-        val SUPPORTED_KINDS = setOf(SourceKind.SO, SourceKind.SQLITE, SourceKind.IL2CPP_METADATA)
+        val SUPPORTED_KINDS = setOf(SourceKind.SO, SourceKind.SQLITE, SourceKind.IL2CPP_METADATA, SourceKind.ARCHIVE)
         val KEY_IL2CPP_SECTIONS = setOf("stringLiteral", "string", "methods", "fields", "typeDefinitions", "images", "assemblies")
     }
 }
