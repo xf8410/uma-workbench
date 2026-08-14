@@ -12,7 +12,8 @@
 - 文件选择器接入，来源入库，SHA-256 重复检测和审计队列
 - SO ELF 头部和 SQLite 3 头部有界分析器
 - IL2CPP global-metadata 魔数、版本、区段描述符和完整区段范围校验
-- IL2CPP `string`/`stringLiteralData` 256 KiB 分块索引、Room 分批落库、分页查询和 checkpoint 恢复
+- IL2CPP 所有非空区段的 256 KiB 分块扫描、逐块 SHA-256、Room 分批落库、分页查询和 checkpoint 恢复
+- IL2CPP `string`/`stringLiteralData` 分块文本索引
 - ZIP/TAR 流式归档清单、展开字节统计和路径逃逸检测（不执行、不落盘解压）
 - 未支持来源使用 `UNSUPPORTED` 状态，不再伪装成 `COMPLETE`
 - GitHub 仓库/分支/Tag/Commit/Issue/PR/Actions/Artifact 契约
@@ -29,7 +30,7 @@
 - 原始归档保存、归档条目分表索引和断点导入
 - 7z 归档解析
 - 完整 SO ELF Section/符号/Build ID 解析
-- IL2CPP type/method/field/image/assembly 版本化实体布局和关联索引
+- IL2CPP type/method/field/image/assembly 版本化实体布局和关联索引（原始区段已完整分块索引）
 - SQLite schema、Master/MetaMD5 解析器
 - Session 原始字段和时间线索引
 - 多仓库去重扫描和证据关联
