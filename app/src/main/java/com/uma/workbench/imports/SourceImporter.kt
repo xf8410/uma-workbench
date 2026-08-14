@@ -9,20 +9,25 @@ import java.security.MessageDigest
 class SourceImporter(private val resolver: ContentResolver) {
     data class ImportedSource(val uri: Uri, val name: String, val size: Long?, val sha256: String, val kind: SourceKind)
 
-    fun import(uri: Uri): ImportedSource {
-        val name = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use { c ->
-            if (c.moveToFirst()) c.getString(0) ?: "unnamed" else "unnamed"
-        } ?: "unnamed"
-        val size = resolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { c ->
-            if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else null
+    fun importSource(uri: Uri): ImportedSource {
+        val metadata = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use { cursor ->
+            if (!cursor.moveToFirst()) null else {
+                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                val displayName = if (nameIndex >= 0 && !cursor.isNull(nameIndex)) cursor.getString(nameIndex) else "unnamed"
+                val length = if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) cursor.getLong(sizeIndex) else null
+                displayName to length
+            }
         }
+        val name = metadata?.first ?: "unnamed"
+        val size = metadata?.second
         val digest = MessageDigest.getInstance("SHA-256")
         resolver.openInputStream(uri)?.use { input ->
             val buffer = ByteArray(64 * 1024)
             while (true) {
                 val count = input.read(buffer)
-                if (count <= 0) break
-                digest.update(buffer, 0, count)
+                if (count < 0) break
+                if (count > 0) digest.update(buffer, 0, count)
             }
         } ?: error("无法读取文件：$uri")
         return ImportedSource(uri, name, size, digest.digest().joinToString("") { "%02x".format(it) }, classify(name))
