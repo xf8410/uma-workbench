@@ -21,8 +21,7 @@ import kotlinx.coroutines.flow.Flow
     @Query("SELECT * FROM work_items WHERE id = :id LIMIT 1") suspend fun get(id: String): WorkItemEntity?
     @Query("SELECT * FROM work_items WHERE status IN ('QUEUED','RETRY_WAIT') ORDER BY updatedAt ASC LIMIT :limit") suspend fun runnable(limit: Int): List<WorkItemEntity>
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(value: WorkItemEntity)
-    @Query("UPDATE work_items SET status = :status, stage = :stage, progress = :progress, checkpoint = :checkpoint, error = :error, updatedAt = :now WHERE id = :id")
-    suspend fun updateState(id: String, status: String, stage: String, progress: Int, checkpoint: String?, error: String?, now: Long)
+    @Query("UPDATE work_items SET status = :status, stage = :stage, progress = :progress, checkpoint = :checkpoint, error = :error, updatedAt = :now WHERE id = :id") suspend fun updateState(id: String, status: String, stage: String, progress: Int, checkpoint: String?, error: String?, now: Long)
 }
 @Dao interface AuditSourceDao {
     @Query("SELECT * FROM audit_sources ORDER BY name ASC") fun observeAll(): Flow<List<AuditSourceEntity>>
@@ -54,10 +53,17 @@ import kotlinx.coroutines.flow.Flow
     @Query("SELECT COUNT(*) FROM il2cpp_section_chunks WHERE sourceId = :sourceId") suspend fun sectionChunkCount(sourceId: String): Long
     @Query("SELECT COUNT(*) FROM il2cpp_string_fragments WHERE sourceId = :sourceId") suspend fun stringFragmentCount(sourceId: String): Long
 }
+@Dao interface ArchiveIndexDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertEntries(values: List<ArchiveEntryEntity>)
+    @Query("SELECT * FROM archive_entries WHERE sourceId = :sourceId ORDER BY entryIndex LIMIT :limit OFFSET :offset") suspend fun entries(sourceId: String, offset: Int, limit: Int): List<ArchiveEntryEntity>
+    @Query("SELECT COUNT(*) FROM archive_entries WHERE sourceId = :sourceId") suspend fun entryCount(sourceId: String): Long
+    @Query("SELECT COUNT(*) FROM archive_entries WHERE sourceId = :sourceId AND unsafePath = 1") suspend fun unsafeEntryCount(sourceId: String): Long
+    @Query("SELECT COALESCE(SUM(uncompressedBytes), 0) FROM archive_entries WHERE sourceId = :sourceId") suspend fun expandedBytes(sourceId: String): Long
+}
 
 @Database(
-    entities = [ConversationEntity::class, MessageEntity::class, WorkItemEntity::class, AuditSourceEntity::class, EvidenceEntity::class, SyncQueueEntity::class, GitHubRepositoryEntity::class, Il2CppSectionEntity::class, Il2CppSectionChunkEntity::class, Il2CppStringFragmentEntity::class],
-    version = 3,
+    entities = [ConversationEntity::class, MessageEntity::class, WorkItemEntity::class, AuditSourceEntity::class, EvidenceEntity::class, SyncQueueEntity::class, GitHubRepositoryEntity::class, Il2CppSectionEntity::class, Il2CppSectionChunkEntity::class, Il2CppStringFragmentEntity::class, ArchiveEntryEntity::class],
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -69,29 +75,28 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun syncQueue(): SyncQueueDao
     abstract fun githubRepositories(): GitHubRepositoryDao
     abstract fun il2CppIndex(): Il2CppIndexDao
+    abstract fun archiveIndex(): ArchiveIndexDao
     companion object {
-        private val MIGRATION_1_2 = object : Migration(1, 2) {
-            override fun migrate(database: SupportSQLiteDatabase) {
-                database.execSQL("CREATE TABLE IF NOT EXISTS `il2cpp_sections` (`sourceId` TEXT NOT NULL, `name` TEXT NOT NULL, `offset` INTEGER NOT NULL, `byteCount` INTEGER NOT NULL, `metadataVersion` INTEGER NOT NULL, `rangeValid` INTEGER NOT NULL, PRIMARY KEY(`sourceId`, `name`))")
-                database.execSQL("CREATE INDEX IF NOT EXISTS `index_il2cpp_sections_sourceId` ON `il2cpp_sections` (`sourceId`)")
-                database.execSQL("CREATE TABLE IF NOT EXISTS `il2cpp_string_fragments` (`sourceId` TEXT NOT NULL, `offset` INTEGER NOT NULL, `byteCount` INTEGER NOT NULL, `text` TEXT NOT NULL, `continuesFromPrevious` INTEGER NOT NULL, `continuesToNext` INTEGER NOT NULL, PRIMARY KEY(`sourceId`, `offset`))")
-                database.execSQL("CREATE INDEX IF NOT EXISTS `index_il2cpp_string_fragments_sourceId` ON `il2cpp_string_fragments` (`sourceId`)")
-                database.execSQL("CREATE INDEX IF NOT EXISTS `index_il2cpp_string_fragments_sourceId_text` ON `il2cpp_string_fragments` (`sourceId`, `text`)")
-            }
-        }
-        private val MIGRATION_2_3 = object : Migration(2, 3) {
-            override fun migrate(database: SupportSQLiteDatabase) {
-                database.execSQL("CREATE TABLE IF NOT EXISTS `il2cpp_section_chunks` (`sourceId` TEXT NOT NULL, `sectionName` TEXT NOT NULL, `sectionOffset` INTEGER NOT NULL, `absoluteOffset` INTEGER NOT NULL, `byteCount` INTEGER NOT NULL, `sha256` TEXT NOT NULL, PRIMARY KEY(`sourceId`, `sectionName`, `sectionOffset`))")
-                database.execSQL("CREATE INDEX IF NOT EXISTS `index_il2cpp_section_chunks_sourceId_sectionName` ON `il2cpp_section_chunks` (`sourceId`, `sectionName`)")
-                database.execSQL("CREATE INDEX IF NOT EXISTS `index_il2cpp_section_chunks_sourceId_absoluteOffset` ON `il2cpp_section_chunks` (`sourceId`, `absoluteOffset`)")
-            }
-        }
+        private val MIGRATION_1_2 = object : Migration(1, 2) { override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS `il2cpp_sections` (`sourceId` TEXT NOT NULL, `name` TEXT NOT NULL, `offset` INTEGER NOT NULL, `byteCount` INTEGER NOT NULL, `metadataVersion` INTEGER NOT NULL, `rangeValid` INTEGER NOT NULL, PRIMARY KEY(`sourceId`, `name`))")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_il2cpp_sections_sourceId` ON `il2cpp_sections` (`sourceId`)")
+            db.execSQL("CREATE TABLE IF NOT EXISTS `il2cpp_string_fragments` (`sourceId` TEXT NOT NULL, `offset` INTEGER NOT NULL, `byteCount` INTEGER NOT NULL, `text` TEXT NOT NULL, `continuesFromPrevious` INTEGER NOT NULL, `continuesToNext` INTEGER NOT NULL, PRIMARY KEY(`sourceId`, `offset`))")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_il2cpp_string_fragments_sourceId` ON `il2cpp_string_fragments` (`sourceId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_il2cpp_string_fragments_sourceId_text` ON `il2cpp_string_fragments` (`sourceId`, `text`)")
+        } }
+        private val MIGRATION_2_3 = object : Migration(2, 3) { override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS `il2cpp_section_chunks` (`sourceId` TEXT NOT NULL, `sectionName` TEXT NOT NULL, `sectionOffset` INTEGER NOT NULL, `absoluteOffset` INTEGER NOT NULL, `byteCount` INTEGER NOT NULL, `sha256` TEXT NOT NULL, PRIMARY KEY(`sourceId`, `sectionName`, `sectionOffset`))")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_il2cpp_section_chunks_sourceId_sectionName` ON `il2cpp_section_chunks` (`sourceId`, `sectionName`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_il2cpp_section_chunks_sourceId_absoluteOffset` ON `il2cpp_section_chunks` (`sourceId`, `absoluteOffset`)")
+        } }
+        private val MIGRATION_3_4 = object : Migration(3, 4) { override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS `archive_entries` (`sourceId` TEXT NOT NULL, `entryIndex` INTEGER NOT NULL, `path` TEXT NOT NULL, `directory` INTEGER NOT NULL, `uncompressedBytes` INTEGER NOT NULL, `compressedBytes` INTEGER, `crc32` INTEGER, `unsafePath` INTEGER NOT NULL, `modifiedAt` INTEGER, `type` TEXT NOT NULL, PRIMARY KEY(`sourceId`, `entryIndex`))")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_archive_entries_sourceId_path` ON `archive_entries` (`sourceId`, `path`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_archive_entries_sourceId_unsafePath` ON `archive_entries` (`sourceId`, `unsafePath`)")
+        } }
         @Volatile private var instance: AppDatabase? = null
         fun get(context: Context): AppDatabase = instance ?: synchronized(this) {
-            instance ?: Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "uma-workbench.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
-                .build()
-                .also { instance = it }
+            instance ?: Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "uma-workbench.db").addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build().also { instance = it }
         }
     }
 }
