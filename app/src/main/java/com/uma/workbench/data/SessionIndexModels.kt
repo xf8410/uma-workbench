@@ -28,6 +28,5 @@ data class SessionFieldEntity(
     val recordIndex: Long,
     val fieldPath: String,
     val normalizedValue: String,
-    val valueType: String,
-    val truncated: Boolean
+    val valueType: String
 )
