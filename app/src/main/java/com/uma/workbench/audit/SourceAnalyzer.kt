@@ -4,6 +4,7 @@ import java.io.InputStream
 
 class SourceAnalyzer {
     fun analyze(kind: SourceKind, input: InputStream): BinaryAnalysis? {
+        if (kind == SourceKind.ARCHIVE) return ArchiveAnalyzer.analyze(input)
         val limit = when (kind) {
             SourceKind.SO -> 64
             SourceKind.SQLITE -> 100
