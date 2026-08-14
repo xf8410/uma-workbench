@@ -25,8 +25,8 @@ class AuditWorker(context: Context, params: WorkerParameters) : UmaWorker(contex
             return Result.success(workDataOf("workItemId" to id, "duplicateOf" to source.duplicateOf))
         }
         val kind = runCatching { SourceKind.valueOf(source.kind) }.getOrElse { return fail(db, id, item.stage, "未知来源类型：${source.kind}") }
-        if (kind != SourceKind.SO && kind != SourceKind.SQLITE) {
-            db.workItems().updateState(id, "COMPLETE", "SUMMARY", 100, "unsupported:${kind.name}", null, System.currentTimeMillis())
+        if (kind !in SUPPORTED_KINDS) {
+            db.workItems().updateState(id, "UNSUPPORTED", "SUMMARY", 100, "unsupported:${kind.name}", null, System.currentTimeMillis())
             return Result.success(workDataOf("workItemId" to id, "note" to "该类型暂未配置解析器"))
         }
         db.workItems().updateState(id, "RUNNING", "BINARY_INDEX", 50, "header", null, System.currentTimeMillis())
@@ -56,6 +56,11 @@ class AuditWorker(context: Context, params: WorkerParameters) : UmaWorker(contex
         is ElfAnalysis -> "ELF ${if (value.is64Bit) 64 else 32}-bit, ${value.endian}-endian, machine=${value.machine}, type=${value.type}, entry=0x${value.entryPoint.toString(16)}"
         is SqliteAnalysis -> "SQLite 3, pageSize=${value.pageSize}, pageCount=${value.pageCount}, encoding=${value.textEncoding}, walHint=${value.isWalModeHint}"
         null -> "没有可用分析结果"
+        else -> value.format
+    }
+
+    private companion object {
+        val SUPPORTED_KINDS = setOf(SourceKind.SO, SourceKind.SQLITE, SourceKind.IL2CPP_METADATA)
     }
 }
 
