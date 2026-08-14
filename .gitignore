@@ -11,3 +11,4 @@ build/
 secrets.properties
 captures/
 .DS_Store
+keystore-base64.txt
