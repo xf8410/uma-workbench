@@ -55,12 +55,19 @@ class AuditWorker(context: Context, params: WorkerParameters) : UmaWorker(contex
     private fun analysisSummary(value: BinaryAnalysis?): String = when (value) {
         is ElfAnalysis -> "ELF ${if (value.is64Bit) 64 else 32}-bit, ${value.endian}-endian, machine=${value.machine}, type=${value.type}, entry=0x${value.entryPoint.toString(16)}"
         is SqliteAnalysis -> "SQLite 3, pageSize=${value.pageSize}, pageCount=${value.pageCount}, encoding=${value.textEncoding}, walHint=${value.isWalModeHint}"
+        is Il2CppMetadataAnalysis -> {
+            val keySections = value.sections
+                .filter { it.name in KEY_IL2CPP_SECTIONS && it.byteCount > 0 }
+                .joinToString { "${it.name}=${it.byteCount}B@0x${it.offset.toString(16)}" }
+            "IL2CPP global-metadata, version=${value.version}, sections=${value.nonEmptySectionCount}" +
+                if (keySections.isEmpty()) "" else ", $keySections"
+        }
         null -> "没有可用分析结果"
-        else -> value.format
     }
 
     private companion object {
         val SUPPORTED_KINDS = setOf(SourceKind.SO, SourceKind.SQLITE, SourceKind.IL2CPP_METADATA)
+        val KEY_IL2CPP_SECTIONS = setOf("stringLiteral", "string", "methods", "fields", "typeDefinitions", "images", "assemblies")
     }
 }
 
