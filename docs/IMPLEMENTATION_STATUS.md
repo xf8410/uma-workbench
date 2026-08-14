@@ -15,6 +15,7 @@
 - IL2CPP 所有非空区段的 256 KiB 分块扫描、逐块 SHA-256、Room 分批落库、分页查询和 checkpoint 恢复
 - IL2CPP `string`/`stringLiteralData` 分块文本索引
 - ZIP/TAR 流式归档清单、展开字节统计和路径逃逸检测（不执行、不落盘解压）
+- ZIP 每 200 条分批 Room 索引、entry checkpoint 恢复、分页查询和幂等重放
 - 未支持来源使用 `UNSUPPORTED` 状态，不再伪装成 `COMPLETE`
 - GitHub 仓库/分支/Tag/Commit/Issue/PR/Actions/Artifact 契约
 - 仓库可见性读取、预览、确认变更和核验审计契约
@@ -27,8 +28,8 @@
 
 - GitHub API 客户端和分页缓存
 - GitHub 设置页面及二次确认流程
-- 原始归档保存、归档条目分表索引和断点导入
-- 7z 归档解析
+- 原始归档保存和 TAR/7z 可恢复条目索引
+- 嵌套归档内容索引
 - 完整 SO ELF Section/符号/Build ID 解析
 - IL2CPP type/method/field/image/assembly 版本化实体布局和关联索引（原始区段已完整分块索引）
 - SQLite schema、Master/MetaMD5 解析器
