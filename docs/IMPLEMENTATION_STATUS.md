@@ -12,6 +12,7 @@
 - 文件选择器接入，来源入库，SHA-256 重复检测和审计队列
 - SO ELF 头部和 SQLite 3 头部有界分析器
 - IL2CPP global-metadata 魔数、版本和区段描述符头部解析
+- ZIP/TAR 流式归档清单、展开字节统计和路径逃逸检测（不执行、不落盘解压）
 - 未支持来源使用 `UNSUPPORTED` 状态，不再伪装成 `COMPLETE`
 - GitHub 仓库/分支/Tag/Commit/Issue/PR/Actions/Artifact 契约
 - 仓库可见性读取、预览、确认变更和核验审计契约
@@ -24,7 +25,8 @@
 
 - GitHub API 客户端和分页缓存
 - GitHub 设置页面及二次确认流程
-- 原始归档保存和断点导入
+- 原始归档保存、归档条目分表索引和断点导入
+- 7z 归档解析
 - 完整 SO ELF Section/符号/Build ID 解析
 - IL2CPP metadata 全量实体解析和分块索引
 - SQLite schema、Master/MetaMD5 解析器
