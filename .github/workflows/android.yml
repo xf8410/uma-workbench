@@ -31,16 +31,25 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-
-      # 解码固定签名keystore
       - name: Decode release keystore
         run: |
           echo "${{ secrets.RELEASE_KEYSTORE }}" | base64 -d > app/release-keystore.jks
           ls -la app/release-keystore.jks
-
       - name: Run diagnostic compile
         id: diagnostic
         run: bash tools/ci-diagnose.sh
+      - name: Describe compile failure
+        id: compile_failure
+        if: failure()
+        shell: bash
+        run: |
+          first_error="$(grep -m1 -E '(^e: |^error: |Compilation error)' build/ci-diagnostics/compileDebugKotlin.log || true)"
+          if [[ -z "$first_error" ]]; then
+            first_error="compile-failed-see-diagnostic-log"
+          fi
+          safe="$(printf '%s' "$first_error" | tr '\n/:\\ ' '-' | tr -cd '[:alnum:]_.-[:space:]' | cut -c1-160)"
+          echo "artifact_suffix=$safe" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "$first_error" >> "$GITHUB_STEP_SUMMARY"
       - name: Build signed debug APK
         if: steps.diagnostic.outcome == 'success'
         env:
@@ -58,8 +67,6 @@ jobs:
       - name: Run unit tests
         if: steps.diagnostic.outcome == 'success'
         run: gradle --no-daemon --stacktrace :app:testDebugUnitTest
-
-      # 上传签名APK
       - name: Upload signed debug APK
         uses: actions/upload-artifact@v4
         with:
@@ -74,12 +81,11 @@ jobs:
           path: app/build/outputs/apk/release/app-release-unsigned.apk
           if-no-files-found: warn
           retention-days: 90
-
       - name: Upload diagnostic bundle
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: android-ci-diagnostics-${{ github.run_id }}
+          name: android-ci-diagnostics-${{ github.run_id }}-${{ steps.compile_failure.outputs.artifact_suffix }}
           path: |
             build/ci-diagnostics
             app/build/reports
