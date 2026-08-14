@@ -1,5 +1,7 @@
 package com.uma.workbench.audit
 
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -26,5 +28,34 @@ class BinaryAnalyzersTest {
         assertEquals(4096, result.pageSize)
         assertEquals(2, result.pageCount)
         assertEquals(1, result.textEncoding)
+    }
+
+    @Test fun parsesIl2CppMetadataHeader() {
+        val bytes = ByteArray(8 + 8 * 31)
+        val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+        buffer.putInt(0, 0xFAB11BAF.toInt())
+        buffer.putInt(4, 29)
+        buffer.putInt(8, 0x100)
+        buffer.putInt(12, 0x200)
+        buffer.putInt(8 + 19 * 8, 0x3000)
+        buffer.putInt(8 + 19 * 8 + 4, 0x4000)
+
+        val result = BinaryAnalyzers.analyzeIl2CppMetadataHeader(bytes)
+
+        assertEquals(29, result.version)
+        assertEquals(31, result.sections.size)
+        assertEquals(2, result.nonEmptySectionCount)
+        assertEquals("stringLiteral", result.sections.first().name)
+        assertEquals(0x100L, result.sections.first().offset)
+        assertEquals(0x200L, result.sections.first().byteCount)
+        assertEquals("typeDefinitions", result.sections[19].name)
+        assertEquals(0x4000L, result.sections[19].byteCount)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsInvalidIl2CppMagic() {
+        val bytes = ByteArray(16)
+        ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).putInt(4, 29)
+        BinaryAnalyzers.analyzeIl2CppMetadataHeader(bytes)
     }
 }
