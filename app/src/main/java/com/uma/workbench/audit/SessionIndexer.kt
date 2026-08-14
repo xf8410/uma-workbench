@@ -58,25 +58,8 @@ object SessionIndexer {
                 }
                 val type = TYPE_PATHS.firstNotNullOfOrNull { byPath[it]?.value } ?: "UNKNOWN"
                 val recordIndex = index - 1
-                records += SessionRecordEntity(
-                    sourceId = sourceId,
-                    recordIndex = recordIndex,
-                    rawText = line,
-                    timestampMillis = timestamp,
-                    recordType = type,
-                    fieldCount = scalars.size,
-                    malformed = scalars.isEmpty() && line.isNotBlank()
-                )
-                fields += scalars.map {
-                    SessionFieldEntity(
-                        sourceId = sourceId,
-                        recordIndex = recordIndex,
-                        fieldPath = it.path,
-                        normalizedValue = it.value,
-                        valueType = it.type,
-                        truncated = false
-                    )
-                }
+                records += SessionRecordEntity(sourceId, recordIndex, line, timestamp, type, scalars.size, scalars.isEmpty() && line.isNotBlank())
+                fields += scalars.map { SessionFieldEntity(sourceId, recordIndex, it.path, it.value, it.type) }
             }
         }
 
@@ -85,9 +68,7 @@ object SessionIndexer {
     }
 
     internal fun parseTopLevelScalars(line: String): Map<String, String> =
-        parseScalars(line)
-            .filter { '.' !in it.path && '[' !in it.path }
-            .associate { it.path to it.value }
+        parseScalars(line).filter { '.' !in it.path && '[' !in it.path }.associate { it.path to it.value }
 
     internal fun parseScalars(line: String): List<Scalar> {
         val parser = JsonScalarParser(line)
@@ -182,7 +163,7 @@ object SessionIndexer {
                 if (value == '"') return output.toString()
                 if (value == '\\') {
                     if (cursor >= text.length) return null
-                    when (val escaped = text[cursor++]) {
+                    when (text[cursor++]) {
                         'n' -> output.append('\n')
                         'r' -> output.append('\r')
                         't' -> output.append('\t')
@@ -199,9 +180,7 @@ object SessionIndexer {
                         }
                         else -> return null
                     }
-                } else {
-                    output.append(value)
-                }
+                } else output.append(value)
             }
             return null
         }
@@ -219,9 +198,6 @@ object SessionIndexer {
 
     const val DEFAULT_BATCH_RECORDS = 500
     private const val BUFFER_SIZE = 64 * 1024
-    private val TIMESTAMP_PATHS = listOf(
-        "timestamp", "time", "createdAt", "created_at", "ts",
-        "metadata.timestamp", "context.timestamp", "event.timestamp"
-    )
+    private val TIMESTAMP_PATHS = listOf("timestamp", "time", "createdAt", "created_at", "ts", "metadata.timestamp", "context.timestamp", "event.timestamp")
     private val TYPE_PATHS = listOf("type", "event", "kind", "name", "metadata.type", "event.type")
 }
