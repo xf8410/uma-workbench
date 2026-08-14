@@ -31,7 +31,30 @@ class ArchiveAnalyzerTest {
         assertEquals(3L, result.fileCount)
         assertEquals(15L, result.expandedBytes)
         assertEquals(1L, result.unsafePathCount)
-        assertTrue(result.entryNamePreview.contains("metadata/global-metadata.dat"))
+        assertEquals(
+            listOf(
+                "metadata/global-metadata.dat",
+                "lib/arm64-v8a/libil2cpp.so",
+                "../../escaped.txt"
+            ),
+            result.entryNames
+        )
+    }
+
+    @Test fun returnsEveryEntryName() {
+        val output = ByteArrayOutputStream()
+        ZipOutputStream(output).use { zip ->
+            repeat(64) { index ->
+                zip.putNextEntry(ZipEntry("entries/$index.bin"))
+                zip.write(index)
+                zip.closeEntry()
+            }
+        }
+
+        val result = ArchiveAnalyzer.analyze(ByteArrayInputStream(output.toByteArray()))
+
+        assertEquals(64, result.entryNames.size)
+        assertEquals("entries/63.bin", result.entryNames.last())
     }
 
     @Test fun detectsUnsafeArchivePaths() {
