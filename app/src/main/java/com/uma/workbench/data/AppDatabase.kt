@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.Flow
 }
 @Dao interface AuditSourceDao {
     @Query("SELECT * FROM audit_sources ORDER BY name ASC") fun observeAll(): Flow<List<AuditSourceEntity>>
+    @Query("SELECT * FROM audit_sources WHERE sha256 = :sha256 ORDER BY id LIMIT 1") suspend fun findBySha256(sha256: String): AuditSourceEntity?
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(value: AuditSourceEntity)
 }
 @Dao interface EvidenceDao {
