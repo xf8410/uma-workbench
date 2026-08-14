@@ -16,11 +16,15 @@ import kotlinx.coroutines.flow.Flow
 }
 @Dao interface WorkItemDao {
     @Query("SELECT * FROM work_items ORDER BY updatedAt DESC") fun observeAll(): Flow<List<WorkItemEntity>>
+    @Query("SELECT * FROM work_items WHERE id = :id LIMIT 1") suspend fun get(id: String): WorkItemEntity?
     @Query("SELECT * FROM work_items WHERE status IN ('QUEUED','RETRY_WAIT') ORDER BY updatedAt ASC LIMIT :limit") suspend fun runnable(limit: Int): List<WorkItemEntity>
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(value: WorkItemEntity)
+    @Query("UPDATE work_items SET status = :status, stage = :stage, progress = :progress, checkpoint = :checkpoint, error = :error, updatedAt = :now WHERE id = :id")
+    suspend fun updateState(id: String, status: String, stage: String, progress: Int, checkpoint: String?, error: String?, now: Long)
 }
 @Dao interface AuditSourceDao {
     @Query("SELECT * FROM audit_sources ORDER BY name ASC") fun observeAll(): Flow<List<AuditSourceEntity>>
+    @Query("SELECT * FROM audit_sources WHERE id = :id LIMIT 1") suspend fun get(id: String): AuditSourceEntity?
     @Query("SELECT * FROM audit_sources WHERE sha256 = :sha256 ORDER BY id LIMIT 1") suspend fun findBySha256(sha256: String): AuditSourceEntity?
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(value: AuditSourceEntity)
 }
