@@ -38,18 +38,15 @@ jobs:
       - name: Run diagnostic compile
         id: diagnostic
         run: bash tools/ci-diagnose.sh
-      - name: Describe compile failure
-        id: compile_failure
+      - name: Publish compile log
         if: failure()
         shell: bash
         run: |
-          first_error="$(grep -m1 -E '(^e: |^error: |Compilation error)' build/ci-diagnostics/compileDebugKotlin.log || true)"
-          if [[ -z "$first_error" ]]; then
-            first_error="compile-failed-see-diagnostic-log"
-          fi
-          safe="$(printf '%s' "$first_error" | tr '\n/:\\ ' '-' | tr -cd '[:alnum:]_.-[:space:]' | cut -c1-160)"
-          echo "artifact_suffix=$safe" >> "$GITHUB_OUTPUT"
-          printf '%s\n' "$first_error" >> "$GITHUB_STEP_SUMMARY"
+          {
+            printf '## compileDebugKotlin.log\n\n```text\n'
+            cat build/ci-diagnostics/compileDebugKotlin.log
+            printf '\n```\n'
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Build signed debug APK
         if: steps.diagnostic.outcome == 'success'
         env:
@@ -85,7 +82,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: android-ci-diagnostics-${{ github.run_id }}-${{ steps.compile_failure.outputs.artifact_suffix }}
+          name: android-ci-diagnostics-${{ github.run_id }}
           path: |
             build/ci-diagnostics
             app/build/reports
