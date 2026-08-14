@@ -26,19 +26,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val importStatus = importState.asStateFlow()
     val network: StateFlow<NetworkState> = app.networkMonitor.state.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), NetworkState.SWITCHING)
 
-    init {
-        viewModelScope.launch { conversations.filter { it.isNotEmpty() }.firstOrNull()?.let { if (selectedId.value == null) selectedId.value = it.first().id } }
-    }
-
+    init { viewModelScope.launch { conversations.filter { it.isNotEmpty() }.firstOrNull()?.let { if (selectedId.value == null) selectedId.value = it.first().id } } }
     fun createConversation() = viewModelScope.launch { selectedId.value = repository.createConversation() }
     fun selectConversation(id: String) { selectedId.value = id }
-    fun send(text: String) {
-        val clean = text.trim(); if (clean.isEmpty()) return
-        viewModelScope.launch {
-            val id = selectedId.value ?: repository.createConversation().also { selectedId.value = it }
-            repository.queueUserMessage(id, clean)
-        }
-    }
+    fun send(text: String) { val clean = text.trim(); if (clean.isEmpty()) return; viewModelScope.launch { val id = selectedId.value ?: repository.createConversation().also { selectedId.value = it }; repository.queueUserMessage(id, clean) } }
 
     fun importDocuments(uris: List<Uri>) = viewModelScope.launch {
         if (uris.isEmpty()) return@launch
@@ -46,13 +37,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         var succeeded = 0
         uris.forEach { uri ->
             runCatching {
-                val takeFlags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
-                runCatching { app.contentResolver.takePersistableUriPermission(uri, takeFlags) }
+                runCatching { app.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }
                 val imported = app.sourceImporter.importSource(uri)
-                repository.queueImportedSource(imported.name, uri.toString(), imported.kind, imported.sha256)
-            }.onSuccess { succeeded++ }
-             .onFailure { importState.value = "已导入 $succeeded/${uris.size}；失败：${it.message ?: "未知错误"}" }
+                val queued = repository.queueImportedSource(imported.name, uri.toString(), imported.kind, imported.sha256)
+                app.workScheduler.scheduleAudit(queued.workItemId)
+            }.onSuccess { succeeded++ }.onFailure { importState.value = "已导入 $succeeded/${uris.size}；失败：${it.message ?: "未知错误"}" }
         }
-        if (succeeded == uris.size) importState.value = "已导入 $succeeded 个文件并加入审计队列"
+        if (succeeded == uris.size) importState.value = "已导入 $succeeded 个文件并启动审计"
     }
 }
