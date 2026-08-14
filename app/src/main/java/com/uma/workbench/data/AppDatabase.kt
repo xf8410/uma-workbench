@@ -60,12 +60,15 @@ import kotlinx.coroutines.flow.Flow
     @Query("SELECT COUNT(*) FROM archive_entries WHERE sourceId = :sourceId AND unsafePath = 1") suspend fun unsafeEntryCount(sourceId: String): Long
     @Query("SELECT COALESCE(SUM(uncompressedBytes), 0) FROM archive_entries WHERE sourceId = :sourceId") suspend fun expandedBytes(sourceId: String): Long
 }
+@Dao interface SessionIndexDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertRecords(values: List<SessionRecordEntity>)
+    @Query("SELECT * FROM session_records WHERE sourceId = :sourceId ORDER BY recordIndex LIMIT :limit OFFSET :offset") suspend fun records(sourceId: String, offset: Int, limit: Int): List<SessionRecordEntity>
+    @Query("SELECT * FROM session_records WHERE sourceId = :sourceId AND timestampMillis IS NOT NULL ORDER BY timestampMillis, recordIndex LIMIT :limit OFFSET :offset") suspend fun timeline(sourceId: String, offset: Int, limit: Int): List<SessionRecordEntity>
+    @Query("SELECT COUNT(*) FROM session_records WHERE sourceId = :sourceId") suspend fun recordCount(sourceId: String): Long
+    @Query("SELECT COUNT(*) FROM session_records WHERE sourceId = :sourceId AND malformed = 1") suspend fun malformedCount(sourceId: String): Long
+}
 
-@Database(
-    entities = [ConversationEntity::class, MessageEntity::class, WorkItemEntity::class, AuditSourceEntity::class, EvidenceEntity::class, SyncQueueEntity::class, GitHubRepositoryEntity::class, Il2CppSectionEntity::class, Il2CppSectionChunkEntity::class, Il2CppStringFragmentEntity::class, ArchiveEntryEntity::class],
-    version = 4,
-    exportSchema = false
-)
+@Database(entities = [ConversationEntity::class, MessageEntity::class, WorkItemEntity::class, AuditSourceEntity::class, EvidenceEntity::class, SyncQueueEntity::class, GitHubRepositoryEntity::class, Il2CppSectionEntity::class, Il2CppSectionChunkEntity::class, Il2CppStringFragmentEntity::class, ArchiveEntryEntity::class, SessionRecordEntity::class], version = 5, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun conversations(): ConversationDao
     abstract fun messages(): MessageDao
@@ -76,6 +79,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun githubRepositories(): GitHubRepositoryDao
     abstract fun il2CppIndex(): Il2CppIndexDao
     abstract fun archiveIndex(): ArchiveIndexDao
+    abstract fun sessionIndex(): SessionIndexDao
     companion object {
         private val MIGRATION_1_2 = object : Migration(1, 2) { override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("CREATE TABLE IF NOT EXISTS `il2cpp_sections` (`sourceId` TEXT NOT NULL, `name` TEXT NOT NULL, `offset` INTEGER NOT NULL, `byteCount` INTEGER NOT NULL, `metadataVersion` INTEGER NOT NULL, `rangeValid` INTEGER NOT NULL, PRIMARY KEY(`sourceId`, `name`))")
@@ -94,9 +98,14 @@ abstract class AppDatabase : RoomDatabase() {
             db.execSQL("CREATE INDEX IF NOT EXISTS `index_archive_entries_sourceId_path` ON `archive_entries` (`sourceId`, `path`)")
             db.execSQL("CREATE INDEX IF NOT EXISTS `index_archive_entries_sourceId_unsafePath` ON `archive_entries` (`sourceId`, `unsafePath`)")
         } }
+        private val MIGRATION_4_5 = object : Migration(4, 5) { override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS `session_records` (`sourceId` TEXT NOT NULL, `recordIndex` INTEGER NOT NULL, `rawText` TEXT NOT NULL, `timestampMillis` INTEGER, `recordType` TEXT NOT NULL, `fieldCount` INTEGER NOT NULL, `malformed` INTEGER NOT NULL, PRIMARY KEY(`sourceId`, `recordIndex`))")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_session_records_sourceId_timestampMillis` ON `session_records` (`sourceId`, `timestampMillis`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_session_records_sourceId_recordType` ON `session_records` (`sourceId`, `recordType`)")
+        } }
         @Volatile private var instance: AppDatabase? = null
         fun get(context: Context): AppDatabase = instance ?: synchronized(this) {
-            instance ?: Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "uma-workbench.db").addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build().also { instance = it }
+            instance ?: Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "uma-workbench.db").addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build().also { instance = it }
         }
     }
 }
