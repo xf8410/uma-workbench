@@ -27,11 +27,7 @@ data class SqliteAnalysis(
     override val warnings: List<String> = emptyList()
 ) : BinaryAnalysis { override val format: String = "SQLite" }
 
-data class Il2CppMetadataSection(
-    val name: String,
-    val offset: Long,
-    val byteCount: Long
-)
+data class Il2CppMetadataSection(val name: String, val offset: Long, val byteCount: Long)
 
 data class Il2CppMetadataAnalysis(
     val version: Int,
@@ -50,7 +46,7 @@ data class ArchiveAnalysis(
     val expandedBytes: Long,
     val declaredCompressedBytes: Long?,
     val unsafePathCount: Long,
-    val entryNamePreview: List<String>,
+    val entryNames: List<String>,
     override val warnings: List<String> = emptyList()
 ) : BinaryAnalysis {
     override val format: String = "ARCHIVE"
@@ -105,7 +101,6 @@ object BinaryAnalyzers {
         require(buffer.getInt(0) == IL2CPP_MAGIC) { "Not an IL2CPP global-metadata file" }
         val version = buffer.getInt(4)
         require(version in 16..40) { "Unsupported IL2CPP metadata version: $version" }
-
         val availablePairs = (header.size - 8) / 8
         val pairCount = minOf(availablePairs, il2CppSectionNames.size)
         val sections = (0 until pairCount).map { index ->
@@ -117,13 +112,16 @@ object BinaryAnalyzers {
             )
         }
         val warnings = buildList {
-            if (pairCount < il2CppSectionNames.size) add("Metadata header preview ended after $pairCount section descriptors")
+            if (pairCount < il2CppSectionNames.size) add("Metadata header ended after $pairCount section descriptors")
             sections.filter { it.byteCount > 0 && it.offset < 8L }.forEach { add("Section ${it.name} has a suspicious offset ${it.offset}") }
-            if (version > 31) add("Metadata version $version uses a newer layout; descriptors are candidates until full-file validation")
+            if (version > 31) add("Metadata version $version uses a newer layout; descriptors require full-file validation")
         }
         return Il2CppMetadataAnalysis(version, sections, warnings)
     }
 
     private fun uint32BigEndian(bytes: ByteArray, offset: Int): Long =
-        ((bytes[offset].toLong() and 0xff) shl 24) or ((bytes[offset + 1].toLong() and 0xff) shl 16) or ((bytes[offset + 2].toLong() and 0xff) shl 8) or (bytes[offset + 3].toLong() and 0xff)
+        ((bytes[offset].toLong() and 0xff) shl 24) or
+            ((bytes[offset + 1].toLong() and 0xff) shl 16) or
+            ((bytes[offset + 2].toLong() and 0xff) shl 8) or
+            (bytes[offset + 3].toLong() and 0xff)
 }
