@@ -26,14 +26,14 @@ object ArchiveAnalyzer {
         var expandedBytes = 0L
         var declaredCompressedBytes = 0L
         var unsafePaths = 0L
-        val preview = ArrayList<String>(PREVIEW_SIZE)
+        val entryNames = ArrayList<String>()
         val buffer = ByteArray(BUFFER_SIZE)
 
         ZipInputStream(input).use { zip ->
             while (true) {
                 val entry = zip.nextEntry ?: break
                 entries++
-                if (preview.size < PREVIEW_SIZE) preview += entry.name
+                entryNames += entry.name
                 if (isUnsafePath(entry.name)) unsafePaths++
                 if (entry.isDirectory) {
                     directories++
@@ -59,7 +59,7 @@ object ArchiveAnalyzer {
             expandedBytes = expandedBytes,
             declaredCompressedBytes = declaredCompressedBytes.takeIf { it > 0 },
             unsafePathCount = unsafePaths,
-            entryNamePreview = preview,
+            entryNames = entryNames,
             warnings = buildList {
                 if (unsafePaths > 0) add("Archive contains $unsafePaths path(s) that must not be extracted verbatim")
             }
@@ -72,7 +72,7 @@ object ArchiveAnalyzer {
         var directories = 0L
         var expandedBytes = 0L
         var unsafePaths = 0L
-        val preview = ArrayList<String>(PREVIEW_SIZE)
+        val entryNames = ArrayList<String>()
         val header = ByteArray(TAR_BLOCK_SIZE)
 
         while (true) {
@@ -88,15 +88,14 @@ object ArchiveAnalyzer {
             val size = parseTarOctal(header, 124, 12)
             val type = header[156].toInt().toChar()
             entries++
-            if (preview.size < PREVIEW_SIZE) preview += fullName
+            entryNames += fullName
             if (isUnsafePath(fullName)) unsafePaths++
             if (type == '5') directories++ else {
                 files++
                 expandedBytes += size
             }
             input.skipFully(size)
-            val padding = (TAR_BLOCK_SIZE - (size % TAR_BLOCK_SIZE)) % TAR_BLOCK_SIZE
-            input.skipFully(padding)
+            input.skipFully((TAR_BLOCK_SIZE - size % TAR_BLOCK_SIZE) % TAR_BLOCK_SIZE)
         }
 
         return ArchiveAnalysis(
@@ -107,7 +106,7 @@ object ArchiveAnalyzer {
             expandedBytes = expandedBytes,
             declaredCompressedBytes = null,
             unsafePathCount = unsafePaths,
-            entryNamePreview = preview,
+            entryNames = entryNames,
             warnings = buildList {
                 if (unsafePaths > 0) add("Archive contains $unsafePaths path(s) that must not be extracted verbatim")
             }
@@ -198,6 +197,5 @@ object ArchiveAnalyzer {
 
     private const val TAR_BLOCK_SIZE = 512
     private const val BUFFER_SIZE = 64 * 1024
-    private const val PREVIEW_SIZE = 20
     private val DRIVE_PREFIX = Regex("^[A-Za-z]:/.*")
 }
