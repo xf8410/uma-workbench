@@ -4,11 +4,17 @@ import java.io.InputStream
 
 class SourceAnalyzer {
     fun analyze(kind: SourceKind, input: InputStream): BinaryAnalysis? {
-        val limit = when (kind) { SourceKind.SO -> 64; SourceKind.SQLITE -> 100; else -> return null }
+        val limit = when (kind) {
+            SourceKind.SO -> 64
+            SourceKind.SQLITE -> 100
+            SourceKind.IL2CPP_METADATA -> IL2CPP_HEADER_PREVIEW_BYTES
+            else -> return null
+        }
         val header = input.readBounded(limit)
         return when (kind) {
             SourceKind.SO -> BinaryAnalyzers.analyzeElf(header)
             SourceKind.SQLITE -> BinaryAnalyzers.analyzeSqliteHeader(header)
+            SourceKind.IL2CPP_METADATA -> BinaryAnalyzers.analyzeIl2CppMetadataHeader(header)
             else -> null
         }
     }
@@ -23,5 +29,9 @@ class SourceAnalyzer {
             offset += count
         }
         return output.copyOf(offset)
+    }
+
+    private companion object {
+        const val IL2CPP_HEADER_PREVIEW_BYTES = 8 + 8 * 31
     }
 }
