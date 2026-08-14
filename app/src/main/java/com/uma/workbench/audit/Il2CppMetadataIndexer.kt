@@ -1,12 +1,13 @@
 package com.uma.workbench.audit
 
+import com.uma.workbench.data.Il2CppSectionChunkEntity
 import com.uma.workbench.data.Il2CppStringFragmentEntity
 import java.io.InputStream
+import java.security.MessageDigest
 
 /**
- * Indexes string-bearing IL2CPP metadata sections without loading the source into memory.
- * A checkpoint is the section name plus its next source-relative byte offset. Persisting a
- * completed batch and its returned checkpoint makes replay idempotent because offsets are keys.
+ * Indexes every IL2CPP metadata section without loading the source into memory. Each committed
+ * chunk has a deterministic primary key and SHA-256, so replay after cancellation is idempotent.
  */
 object Il2CppMetadataIndexer {
     data class Checkpoint(val sectionName: String, val nextOffset: Long) {
@@ -23,35 +24,32 @@ object Il2CppMetadataIndexer {
     }
 
     data class Batch(
+        val chunk: Il2CppSectionChunkEntity,
         val fragments: List<Il2CppStringFragmentEntity>,
         val checkpoint: Checkpoint?,
         val consumedBytes: Int,
         val complete: Boolean
     )
 
-    val indexedSectionNames = listOf("stringLiteralData", "string")
+    val stringSectionNames = setOf("stringLiteralData", "string")
 
     fun validateSections(analysis: Il2CppMetadataAnalysis, sourceLength: Long?): List<Il2CppMetadataSection> =
         analysis.sections.filter { section ->
             section.byteCount == 0L || (
-                section.offset >= 0 &&
-                    section.byteCount >= 0 &&
+                section.offset >= 0 && section.byteCount >= 0 &&
                     section.offset <= Long.MAX_VALUE - section.byteCount &&
                     (sourceLength == null || section.offset + section.byteCount <= sourceLength)
                 )
         }
 
-    fun readBatch(
+    fun readSectionBatch(
         sourceId: String,
         openInput: () -> InputStream,
         section: Il2CppMetadataSection,
         nextOffset: Long = 0,
         maxBytes: Int = DEFAULT_BATCH_BYTES
     ): Batch {
-        require(section.name in indexedSectionNames) { "Section ${section.name} is not a string-bearing index section" }
-        require(nextOffset in 0..section.byteCount) { "Checkpoint is outside section ${section.name}" }
-        if (nextOffset == section.byteCount) return Batch(emptyList(), null, 0, true)
-
+        require(nextOffset in 0 until section.byteCount) { "Checkpoint is outside section ${section.name}" }
         val requested = minOf(maxBytes.toLong(), section.byteCount - nextOffset).toInt()
         val bytes = ByteArray(requested)
         val count = openInput().use { input ->
@@ -59,20 +57,25 @@ object Il2CppMetadataIndexer {
             input.readFullyOrEof(bytes)
         }
         require(count == requested) { "IL2CPP section ${section.name} is truncated at ${nextOffset + count}" }
-
-        val fragments = parseNullTerminatedFragments(
-            sourceId = sourceId,
-            bytes = bytes,
-            absoluteOffset = section.offset + nextOffset,
+        val complete = nextOffset + count == section.byteCount
+        val fragments = if (section.name in stringSectionNames) parseNullTerminatedFragments(
+            sourceId, bytes, section.offset + nextOffset,
             continuesFromPrevious = nextOffset > 0,
-            continuesToNext = nextOffset + count < section.byteCount
-        )
-        val newOffset = nextOffset + count
+            continuesToNext = !complete
+        ) else emptyList()
         return Batch(
+            chunk = Il2CppSectionChunkEntity(
+                sourceId = sourceId,
+                sectionName = section.name,
+                sectionOffset = nextOffset,
+                absoluteOffset = section.offset + nextOffset,
+                byteCount = count,
+                sha256 = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+            ),
             fragments = fragments,
-            checkpoint = if (newOffset < section.byteCount) Checkpoint(section.name, newOffset) else null,
+            checkpoint = if (complete) null else Checkpoint(section.name, nextOffset + count),
             consumedBytes = count,
-            complete = newOffset == section.byteCount
+            complete = complete
         )
     }
 
@@ -87,33 +90,15 @@ object Il2CppMetadataIndexer {
         var start = 0
         for (index in bytes.indices) {
             if (bytes[index] != 0.toByte()) continue
-            if (index > start) {
-                result += fragment(sourceId, bytes, start, index, absoluteOffset, continuesFromPrevious && start == 0, false)
-            }
+            if (index > start) result += fragment(sourceId, bytes, start, index, absoluteOffset, continuesFromPrevious && start == 0, false)
             start = index + 1
         }
-        if (start < bytes.size) {
-            result += fragment(sourceId, bytes, start, bytes.size, absoluteOffset, continuesFromPrevious && start == 0, continuesToNext)
-        }
+        if (start < bytes.size) result += fragment(sourceId, bytes, start, bytes.size, absoluteOffset, continuesFromPrevious && start == 0, continuesToNext)
         return result
     }
 
-    private fun fragment(
-        sourceId: String,
-        bytes: ByteArray,
-        start: Int,
-        end: Int,
-        absoluteOffset: Long,
-        continuesFromPrevious: Boolean,
-        continuesToNext: Boolean
-    ): Il2CppStringFragmentEntity = Il2CppStringFragmentEntity(
-        sourceId = sourceId,
-        offset = absoluteOffset + start,
-        byteCount = end - start,
-        text = bytes.copyOfRange(start, end).toString(Charsets.UTF_8),
-        continuesFromPrevious = continuesFromPrevious,
-        continuesToNext = continuesToNext
-    )
+    private fun fragment(sourceId: String, bytes: ByteArray, start: Int, end: Int, absoluteOffset: Long, fromPrevious: Boolean, toNext: Boolean) =
+        Il2CppStringFragmentEntity(sourceId, absoluteOffset + start, end - start, bytes.copyOfRange(start, end).toString(Charsets.UTF_8), fromPrevious, toNext)
 
     private fun InputStream.skipFully(byteCount: Long) {
         var remaining = byteCount
