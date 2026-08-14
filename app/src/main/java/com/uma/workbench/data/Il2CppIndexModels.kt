@@ -1,7 +1,6 @@
 package com.uma.workbench.data
 
 import androidx.room.Entity
-import androidx.room.ForeignKey
 import androidx.room.Index
 
 @Entity(
@@ -16,6 +15,20 @@ data class Il2CppSectionEntity(
     val byteCount: Long,
     val metadataVersion: Int,
     val rangeValid: Boolean
+)
+
+@Entity(
+    tableName = "il2cpp_section_chunks",
+    primaryKeys = ["sourceId", "sectionName", "sectionOffset"],
+    indices = [Index(value = ["sourceId", "sectionName"]), Index(value = ["sourceId", "absoluteOffset"])]
+)
+data class Il2CppSectionChunkEntity(
+    val sourceId: String,
+    val sectionName: String,
+    val sectionOffset: Long,
+    val absoluteOffset: Long,
+    val byteCount: Int,
+    val sha256: String
 )
 
 @Entity(
