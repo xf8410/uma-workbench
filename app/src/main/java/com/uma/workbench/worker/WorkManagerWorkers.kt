@@ -62,11 +62,14 @@ class AuditWorker(context: Context, params: WorkerParameters) : UmaWorker(contex
     }
 
     private suspend fun indexArchive(db: AppDatabase, id: String, sourceId: String, name: String, uri: Uri, encodedCheckpoint: String?): Result {
-        require(name.endsWith(".zip", true)) { "Resumable entry indexing currently supports ZIP; TAR remains available as single-pass inventory" }
         var checkpoint = ArchiveIndexer.Checkpoint.decode(encodedCheckpoint)
+        val format = checkpoint?.format ?: ArchiveIndexer.detectFormat(open(uri))
         do {
             currentCoroutineContext().ensureActive()
-            val batch = ArchiveIndexer.readZipBatch(sourceId, { open(uri) }, checkpoint)
+            val batch = when (format) {
+                ArchiveIndexer.Format.ZIP -> ArchiveIndexer.readZipBatch(sourceId, { open(uri) }, checkpoint)
+                ArchiveIndexer.Format.TAR -> ArchiveIndexer.readTarBatch(sourceId, { open(uri) }, checkpoint)
+            }
             db.withTransaction {
                 if (batch.entries.isNotEmpty()) db.archiveIndex().upsertEntries(batch.entries)
                 db.workItems().updateState(id, "RUNNING", "FILE_INDEX", if (batch.complete) 95 else 50, batch.checkpoint?.encode(), null, System.currentTimeMillis())
@@ -76,7 +79,7 @@ class AuditWorker(context: Context, params: WorkerParameters) : UmaWorker(contex
         val count = db.archiveIndex().entryCount(sourceId)
         val unsafe = db.archiveIndex().unsafeEntryCount(sourceId)
         val expanded = db.archiveIndex().expandedBytes(sourceId)
-        val summary = "ZIP archive, indexedEntries=$count, expandedBytes=$expanded, unsafePaths=$unsafe"
+        val summary = "${format.name} archive, indexedEntries=$count, expandedBytes=$expanded, unsafePaths=$unsafe"
         db.withTransaction {
             db.evidence().insert(EvidenceEntity(UUID.randomUUID().toString(), sourceId, name, offset = 0, summary = summary, confidence = "CONFIRMED", createdAt = System.currentTimeMillis()))
             db.workItems().updateState(id, "COMPLETE", "SUMMARY", 100, null, null, System.currentTimeMillis())
