@@ -11,6 +11,14 @@ import com.uma.workbench.data.ProjectEntity
 import com.uma.workbench.data.RecentFileEntity
 import com.uma.workbench.hlpatch.HlpatchClient
 import com.uma.workbench.network.NetworkState
+import com.uma.workbench.protocol.GameEndpoint
+import com.uma.workbench.protocol.GameRequest
+import com.uma.workbench.protocol.GameSession
+import com.uma.workbench.protocol.PacketCrypto
+import com.uma.workbench.protocol.ProtocolLogEntry
+import com.uma.workbench.protocol.ProtocolSender
+import com.uma.workbench.protocol.SessionManager
+import com.uma.workbench.protocol.SidDumper
 import com.uma.workbench.workspace.WorkspaceManager
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
@@ -62,6 +70,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val networkState = app.networkState.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), NetworkState.ONLINE)
     private val hlpatchClient = HlpatchClient(db)
     val hlpatchState = MutableStateFlow(hlpatchClient.state)
+
+    // ── 育成协议 (协议面板) ──
+    private val sessionManager = SessionManager(db)
+    private val protocolSender = ProtocolSender(application, db, hlpatchClient)
+    private val sidDumper = SidDumper(db, hlpatchClient, sessionManager)
+
+    val activeSession = sessionManager.activeSession
+    val protocolLogs: MutableStateFlow<List<ProtocolLogEntry>> = protocolSender.logs
+    val dumpState: MutableStateFlow<String> = MutableStateFlow("")
 
     // ── 工作区操作 ──
     fun createWorkspace(name: String) = viewModelScope.launch {
@@ -136,5 +153,63 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         hlpatchState.value = HlpatchClient.ConnectionState.CONNECTING
         val result = hlpatchClient.health()
         hlpatchState.value = hlpatchClient.state
+    }
+
+    // ── 育成协议操作 ──
+    fun dumpSid() = viewModelScope.launch {
+        dumpState.value = "正在连接 hlpatch…"
+        val health = hlpatchClient.health()
+        if (!health.ok) { dumpState.value = "hlpatch 未连接"; return@launch }
+        dumpState.value = "正在读取 /summary…"
+        val status = hlpatchClient.status()
+        if (!status.ok) { dumpState.value = "读取失败"; return@launch }
+        // 从 /summary 响应中提取 SID 和 viewer_id
+        val sid = extractJsonField(status.body, "sid") ?: extractJsonField(status.body, "SID")
+        val vid = extractJsonField(status.body, "viewer_id") ?: extractJsonField(status.body, "viewerId")
+        if (sid != null) {
+            sessionManager.importFromHlpatch(sid, vid?.toLongOrNull() ?: 0L, mapOf(
+                "APP-VER" to (extractJsonField(status.body, "app_ver") ?: "2.29.0"),
+                "RES-VER" to extractJsonField(status.body, "res_ver"),
+                "Device-Id" to extractJsonField(status.body, "device_id")
+            ))
+            dumpState.value = "已 dump SID: ${sid.take(8)}…"
+        } else {
+            dumpState.value = "未找到 SID"
+        }
+    }
+
+    fun sendProtocolRequest(endpoint: String, sid: String, viewerId: Long?, body: String, channel: Int) = viewModelScope.launch {
+        val ep = GameEndpoint.entries.find { it.path == endpoint } ?: GameEndpoint.LOGIN
+        val req = GameRequest(
+            endpoint = ep,
+            sid = sid.ifBlank { null },
+            viewerId = viewerId,
+            body = body,
+            headers = sessionManager.buildHeaders(activeSession.value)
+        )
+        val ch = when (channel) { 0 -> com.uma.workbench.protocol.SendChannel.OKHTTP_DIRECT; 1 -> com.uma.workbench.protocol.SendChannel.OKHTTP_CUSTOM_TLS; else -> com.uma.workbench.protocol.SendChannel.HLPATCH_PROXY }
+        val baseUrl = "https://game-server.example.com"
+        val url = "$baseUrl/${ep.path}"
+        runCatching {
+            val resp = when (ch) {
+                com.uma.workbench.protocol.SendChannel.OKHTTP_DIRECT -> protocolSender.sendDirect(url, req)
+                com.uma.workbench.protocol.SendChannel.OKHTTP_CUSTOM_TLS -> protocolSender.sendCustomTls(url, req)
+                com.uma.workbench.protocol.SendChannel.HLPATCH_PROXY -> protocolSender.sendViaHlpatch(url, req)
+            }
+        }.onFailure { /* 日志已记录 */ }
+    }
+
+    private fun extractJsonField(json: String, field: String): String? {
+        val patterns = listOf("\"$field\"", "'$field'", "$field:")
+        for (pattern in patterns) {
+            val idx = json.indexOf(pattern, ignoreCase = true)
+            if (idx >= 0) {
+                val after = json.substring(idx + pattern.length).trimStart(' ', ':', '"', '\'')
+                val end = after.indexOfFirst { it == '"' || it == '\'' || it == ',' || it == '}' || it == '\n' }
+                val value = if (end >= 0) after.substring(0, end) else after.take(64)
+                if (value.isNotEmpty()) return value
+            }
+        }
+        return null
     }
 }

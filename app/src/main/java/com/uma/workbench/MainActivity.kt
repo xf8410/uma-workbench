@@ -134,7 +134,7 @@ private fun TraeLayout(
 ) {
     var leftCollapsed by remember { mutableStateOf(false) }
     var rightCollapsed by remember { mutableStateOf(false) }
-    var activeBottomTab by remember { mutableStateOf(0) } // 0=代码 1=历史
+    var activeBottomTab by remember { mutableStateOf(0) } // 0=代码 1=历史 2=协议
 
     val projects by vm.projects.collectAsStateWithLifecycle()
     val recentFiles by vm.recentFiles.collectAsStateWithLifecycle()
@@ -205,6 +205,10 @@ private fun TraeLayout(
                                 }
                             )
                         }
+                    }
+                    // 底部协议面板
+                    if (activeBottomTab == 2) {
+                        ProtocolPanel(vm)
                     }
                 }
 
@@ -458,6 +462,7 @@ private fun BottomBar(activeTab: Int, onTabChange: (Int) -> Unit) {
         Row(Modifier.fillMaxSize().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             BottomTab("代码", activeTab == 0) { onTabChange(0) }
             BottomTab("历史", activeTab == 1) { onTabChange(1) }
+            BottomTab("协议", activeTab == 2) { onTabChange(2) }
             Spacer(Modifier.weight(1f))
             Text("UMA Workbench v0.1", style = MaterialTheme.typography.labelSmall, color = WorkbenchColors.textMuted)
         }
@@ -470,3 +475,157 @@ private fun BottomTab(label: String, active: Boolean, onClick: () -> Unit) {
         Text(label, Modifier.padding(horizontal = 8.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall, color = if (active) WorkbenchColors.accent else WorkbenchColors.textMuted)
     }
 }
+
+// ── 协议面板 ──
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ProtocolPanel(vm: MainViewModel) {
+    var selectedEndpoint by remember { mutableStateOf("login") }
+    var sidInput by remember { mutableStateOf("") }
+    var viewerIdInput by remember { mutableStateOf("") }
+    var bodyInput by remember { mutableStateOf("") }
+    var selectedChannel by remember { mutableStateOf(0) }
+    val scope = androidx.lifecycle.viewModelScope
+    val protoLogs by vm.protocolLogs.collectAsStateWithLifecycle()
+    val activeSession by vm.activeSession.collectAsStateWithLifecycle()
+    val dumpState by vm.dumpState.collectAsStateWithLifecycle()
+
+    Column(Modifier.fillMaxWidth().height(280.dp).background(WorkbenchColors.bg)) {
+        // 顶部：SID dump 区
+        Surface(color = WorkbenchColors.bgSecondary, modifier = Modifier.fillMaxWidth()) {
+            Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("SID", style = MaterialTheme.typography.labelMedium, color = WorkbenchColors.accent, modifier = Modifier.width(30.dp))
+                OutlinedTextField(
+                    value = sidInput, onValueChange = { sidInput = it },
+                    placeholder = { Text("SID", style = MaterialTheme.typography.labelSmall) },
+                    modifier = Modifier.weight(1f).height(36.dp),
+                    textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    singleLine = true,
+                    colors = textFieldColors()
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("VID", style = MaterialTheme.typography.labelMedium, color = WorkbenchColors.accent, modifier = Modifier.width(30.dp))
+                OutlinedTextField(
+                    value = viewerIdInput, onValueChange = { viewerIdInput = it },
+                    placeholder = { Text("viewer_id", style = MaterialTheme.typography.labelSmall) },
+                    modifier = Modifier.width(100.dp).height(36.dp),
+                    textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    singleLine = true,
+                    colors = textFieldColors()
+                )
+                Spacer(Modifier.width(8.dp))
+                Button(
+                    onClick = { vm.dumpSid() },
+                    modifier = Modifier.height(36.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = WorkbenchColors.accentDim, contentColor = WorkbenchColors.accentBright),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp)
+                ) {
+                    Text("Dump", style = MaterialTheme.typography.labelMedium)
+                }
+                Spacer(Modifier.width(4.dp))
+                if (activeSession != null) {
+                    val s = activeSession!!
+                    Surface(color = if (s.bound) WorkbenchColors.success.copy(alpha = 0.2f) else WorkbenchColors.warning.copy(alpha = 0.2f), shape = RoundedCornerShape(3.dp)) {
+                        Text(
+                            if (s.bound) "SID ${s.sid.take(8)}… 已绑定 ${s.viewerId}" else "SID ${s.sid.take(8)}… 未绑定",
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (s.bound) WorkbenchColors.success else WorkbenchColors.warning
+                        )
+                    }
+                }
+                if (dumpState.isNotBlank()) {
+                    Spacer(Modifier.width(4.dp))
+                    Text(dumpState, style = MaterialTheme.typography.labelSmall, color = WorkbenchColors.textMuted)
+                }
+            }
+        }
+        // 中部：端点选择 + 请求体 + 通道 + 发送
+        Surface(color = WorkbenchColors.bg, modifier = Modifier.weight(1f)) {
+            Column(Modifier.padding(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val endpoints = listOf("login", "start_session", "load/index", "boot", "pre_signup", "signup")
+                    var expanded by remember { mutableStateOf(false) }
+                    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+                        OutlinedTextField(
+                            value = selectedEndpoint, onValueChange = {}, readOnly = true,
+                            label = { Text("端点", style = MaterialTheme.typography.labelSmall) },
+                            modifier = Modifier.menuAnchor().width(160.dp).height(36.dp),
+                            textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                            colors = textFieldColors()
+                        )
+                        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                            endpoints.forEach { ep ->
+                                DropdownMenuItem(text = { Text(ep, fontFamily = FontFamily.Monospace) }, onClick = { selectedEndpoint = ep; expanded = false })
+                            }
+                        }
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    val channels = listOf("直发", "自定义TLS", "hlpatch转发")
+                    channels.forEachIndexed { idx, label ->
+                        Surface(
+                            color = if (selectedChannel == idx) WorkbenchColors.accentDim else Color.Transparent,
+                            shape = RoundedCornerShape(3.dp),
+                            modifier = Modifier.clip(RoundedCornerShape(3.dp)).clickable { selectedChannel = idx }
+                        ) {
+                            Text(label, Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, color = if (selectedChannel == idx) WorkbenchColors.accent else WorkbenchColors.textMuted)
+                        }
+                    }
+                    Spacer(Modifier.weight(1f))
+                    Button(
+                        onClick = {
+                            vm.sendProtocolRequest(selectedEndpoint, sidInput, viewerIdInput.toLongOrNull(), bodyInput, selectedChannel)
+                        },
+                        modifier = Modifier.height(36.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = WorkbenchColors.accent, contentColor = Color.White),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp)
+                    ) {
+                        Text("发送", style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+                OutlinedTextField(
+                    value = bodyInput, onValueChange = { bodyInput = it },
+                    placeholder = { Text("请求体（JSON/明文）", style = MaterialTheme.typography.labelSmall) },
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace, color = WorkbenchColors.textPrimary),
+                    colors = textFieldColors()
+                )
+            }
+        }
+        // 底部：协议日志
+        Surface(color = WorkbenchColors.bgSecondary, modifier = Modifier.height(80.dp)) {
+            if (protoLogs.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("暂无协议日志", style = MaterialTheme.typography.labelSmall, color = WorkbenchColors.textMuted)
+                }
+            } else {
+                TerminalLogViewer(
+                    entries = protoLogs.map { entry ->
+                        LogEntry(
+                            timestamp = java.text.SimpleDateFormat("HH:mm:ss").format(java.util.Date(entry.timestamp)),
+                            level = if (entry.response?.success == true) LogLevel.OK else LogLevel.ERR,
+                            source = entry.channel.name,
+                            message = "${entry.request.endpoint.path}: ${entry.response?.protocolCode?.label ?: entry.error ?: "无响应"}"
+                        )
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun textFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedTextColor = WorkbenchColors.textPrimary,
+    unfocusedTextColor = WorkbenchColors.textPrimary,
+    focusedContainerColor = WorkbenchColors.bgSurface,
+    unfocusedContainerColor = WorkbenchColors.bgSurface,
+    focusedBorderColor = WorkbenchColors.accent,
+    unfocusedBorderColor = WorkbenchColors.border,
+    cursorColor = WorkbenchColors.accent,
+    focusedLabelColor = WorkbenchColors.accent,
+    unfocusedLabelColor = WorkbenchColors.textMuted
+)
