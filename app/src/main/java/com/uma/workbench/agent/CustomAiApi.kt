@@ -10,6 +10,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.put
 
 @Serializable
@@ -24,6 +25,7 @@ data class CustomAiApiProtocol(
     val inputTokensPath: String = "usage.prompt_tokens",
     val outputTokensPath: String = "usage.completion_tokens",
     val totalTokensPath: String = "usage.total_tokens",
+    val toolCallsPath: String = "choices.0.delta.tool_calls",
     val doneValue: String = "[DONE]"
 ) {
     fun validate() {
@@ -52,6 +54,20 @@ class CustomAiApiAdapter(private val protocol: CustomAiApiProtocol, private val 
         val events = mutableListOf<AiStreamEvent>()
         value(root, protocol.modelPath)?.primitiveText()?.let { events += AiStreamEvent.Model(it) }
         value(root, protocol.textPath)?.primitiveText()?.let { if (it.isNotEmpty()) events += AiStreamEvent.TextDelta(it) }
+        val calls = value(root, protocol.toolCallsPath) as? JsonArray
+        calls?.forEachIndexed { fallbackIndex, element ->
+            val call = element as? JsonObject ?: error("tool_calls[$fallbackIndex] 必须是 JSON object")
+            val function = call["function"] as? JsonObject
+            val index = (call["index"] as? JsonPrimitive)?.intOrNull ?: fallbackIndex
+            events += AiStreamEvent.ToolCallDelta(
+                AiToolCallDelta(
+                    index = index,
+                    idFragment = (call["id"] as? JsonPrimitive)?.contentOrNull.orEmpty(),
+                    nameFragment = (function?.get("name") as? JsonPrimitive)?.contentOrNull.orEmpty(),
+                    argumentsFragment = (function?.get("arguments") as? JsonPrimitive)?.contentOrNull.orEmpty()
+                )
+            )
+        }
         val input = value(root, protocol.inputTokensPath)?.primitiveLong(); val output = value(root, protocol.outputTokensPath)?.primitiveLong(); val total = value(root, protocol.totalTokensPath)?.primitiveLong()
         if (input != null || output != null || total != null) { val safeInput = input ?: 0; val safeOutput = output ?: 0; events += AiStreamEvent.Usage(AiTokenUsage(safeInput, safeOutput, total ?: safeInput + safeOutput)) }
         return events
