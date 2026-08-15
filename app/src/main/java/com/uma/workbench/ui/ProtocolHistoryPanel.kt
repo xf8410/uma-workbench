@@ -35,6 +35,7 @@ fun ProtocolHistoryPanel(vm: MainViewModel) {
             TextButton(enabled = selectedIds.size == 2, onClick = { showDiff = true }) { Text("完整 Diff") }
             TextButton(onClick = { vm.clearProtocolHistorySelection(); showDiff = false }) { Text("清除选择") }
         }
+        ProtocolHistoryTransferControls(vm)
         if (records.isEmpty()) Text("暂无持久化协议记录", color = WorkbenchColors.textMuted)
         LazyColumn(Modifier.fillMaxSize()) {
             items(records, key = { it.id }) { record ->
