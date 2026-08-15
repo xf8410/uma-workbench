@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -78,167 +77,65 @@ fun AiChatScreen(vm: AiChatViewModel, openConfiguration: () -> Unit) {
                 Text(document?.title ?: "未打开工作区文件", style = MaterialTheme.typography.labelSmall)
             }
             Row {
-                TextButton(onClick = { showHistory = true }, enabled = document != null && !live) {
-                    Icon(Icons.Default.History, null)
-                    Text("历史")
-                }
-                TextButton(onClick = vm::newConversation, enabled = !live) {
-                    Icon(Icons.Default.AddComment, null)
-                    Text("新对话")
-                }
+                TextButton(onClick = { showHistory = true }, enabled = document != null && !live) { Icon(Icons.Default.History, null); Text("历史") }
+                TextButton(onClick = vm::newConversation, enabled = !live) { Icon(Icons.Default.AddComment, null); Text("新对话") }
                 TextButton(onClick = openConfiguration) { Text("配置") }
             }
         }
-
-        LazyColumn(
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-            state = listState,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
+        LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(messages, key = { it.id }) { message ->
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(10.dp)) {
-                        Text(if (message.role.equals("user", true)) "你" else "AI", style = MaterialTheme.typography.labelMedium)
-                        Text(message.content)
-                        if (!message.role.equals("user", true)) {
-                            Text(
-                                listOfNotNull(message.status, message.modelUsed, message.tokenCount?.let { "Token $it" }).joinToString(" · "),
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                        }
-                    }
-                }
+                Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(10.dp)) {
+                    Text(if (message.role.equals("user", true)) "你" else "AI", style = MaterialTheme.typography.labelMedium)
+                    Text(message.content)
+                    if (!message.role.equals("user", true)) Text(listOfNotNull(message.status, message.modelUsed, message.tokenCount?.let { "Token $it" }).joinToString(" · "), style = MaterialTheme.typography.labelSmall)
+                } }
             }
             items(rounds, key = { "round-${it.index}" }) { AgentRoundCard(it) }
-            if (live) {
-                item("live") {
-                    Card(Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(10.dp)) {
-                            Text("AI · 第 ${rounds.size + 1} 轮")
-                            Text(generation.completeText.ifEmpty { "等待模型或执行只读工具…" })
-                        }
-                    }
-                }
-            }
+            if (live) item("live") { Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(10.dp)) { Text("AI · 第 ${rounds.size + 1} 轮"); Text(generation.completeText.ifEmpty { "等待模型或执行只读工具…" }) } } }
         }
-
         Row(Modifier.fillMaxWidth()) {
-            TextButton(onClick = { showSearch = true }, enabled = document != null && !live) {
-                Icon(Icons.Default.Search, null)
-                Text("搜索")
-            }
-            TextButton(onClick = { showRange = true }, enabled = document != null && !live) {
-                Icon(Icons.Default.AttachFile, null)
-                Text("文件范围")
-            }
+            TextButton(onClick = { showSearch = true }, enabled = document != null && !live) { Icon(Icons.Default.Search, null); Text("搜索") }
+            TextButton(onClick = { showRange = true }, enabled = document != null && !live) { Icon(Icons.Default.AttachFile, null); Text("文件范围") }
             Text("附件 ${attachments.size}", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(12.dp))
         }
-        attachments.forEach { attachment ->
-            AssistChip(
-                onClick = { vm.removeAttachment(attachment.id) },
-                label = { Text("${attachment.title} L${attachment.startLine}-${attachment.endLine} · ${attachment.sentCharacterCount}/${attachment.completeCharacterCount}") },
-                trailingIcon = { Icon(Icons.Default.Close, null) }
-            )
-        }
+        attachments.forEach { attachment -> AssistChip(onClick = { vm.removeAttachment(attachment.id) }, label = { Text("${attachment.title} L${attachment.startLine}-${attachment.endLine} · ${attachment.sentCharacterCount}/${attachment.completeCharacterCount}") }, trailingIcon = { Icon(Icons.Default.Close, null) }) }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(input, { input = it }, label = { Text("发送消息") }, enabled = generation.canSend, modifier = Modifier.weight(1f), maxLines = 5)
-            IconButton(
-                onClick = {
-                    if (generation.canInterrupt) vm.interrupt()
-                    else if (input.isNotBlank() && selection != null) {
-                        vm.send(input)
-                        input = ""
-                    }
-                },
-                enabled = generation.canInterrupt || (input.isNotBlank() && selection != null)
-            ) { Icon(if (generation.canInterrupt) Icons.Default.Stop else Icons.Default.Send, null) }
+            IconButton(onClick = { if (generation.canInterrupt) vm.interrupt() else if (input.isNotBlank() && selection != null) { vm.send(input); input = "" } }, enabled = generation.canInterrupt || (input.isNotBlank() && selection != null)) { Icon(if (generation.canInterrupt) Icons.Default.Stop else Icons.Default.Send, null) }
         }
     }
-
-    if (showHistory) {
-        ConversationHistoryDialog(
-            conversations = conversations,
-            currentId = currentId,
-            dismiss = { showHistory = false },
-            open = {
-                vm.openConversation(it)
-                showHistory = false
-            }
-        )
-    }
-    if (showRange) {
-        FileRangeDialog(document, { showRange = false }) { start, end ->
-            vm.attachCurrentFileRange(start, end)
-            showRange = false
-        }
-    }
+    if (showHistory) ConversationHistoryDialog(conversations, currentId, { showHistory = false }) { vm.openConversation(it); showHistory = false }
+    if (showRange) FileRangeDialog(document, { showRange = false }) { start, end -> vm.attachCurrentFileRange(start, end); showRange = false }
     if (showSearch) WorkspaceSearchDialog(vm) { showSearch = false }
 }
 
 @Composable
-private fun ConversationHistoryDialog(
-    conversations: List<ConversationEntity>,
-    currentId: String?,
-    dismiss: () -> Unit,
-    open: (String) -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = dismiss,
-        confirmButton = { TextButton(onClick = dismiss) { Text("关闭") } },
-        title = { Text("当前工作区对话") },
-        text = {
-            LazyColumn(Modifier.fillMaxWidth().heightIn(max = 480.dp)) {
-                if (conversations.isEmpty()) item { Text("暂无历史对话") }
-                items(conversations, key = { it.id }) { conversation ->
-                    ListItem(
-                        headlineContent = { Text(conversation.title) },
-                        supportingContent = { Text("${conversation.agentMode} · ${conversation.updatedAt}") },
-                        leadingContent = { if (conversation.id == currentId) Icon(Icons.Default.Chat, null) },
-                        modifier = Modifier.fillMaxWidth().clickable { open(conversation.id) }
-                    )
-                    HorizontalDivider()
-                }
+private fun ConversationHistoryDialog(conversations: List<ConversationEntity>, currentId: String?, dismiss: () -> Unit, open: (String) -> Unit) {
+    AlertDialog(onDismissRequest = dismiss, confirmButton = { TextButton(onClick = dismiss) { Text("关闭") } }, title = { Text("当前工作区对话") }, text = {
+        LazyColumn(Modifier.fillMaxWidth().heightIn(max = 480.dp)) {
+            if (conversations.isEmpty()) item { Text("暂无历史对话") }
+            items(conversations, key = { it.id }) { conversation ->
+                ListItem(headlineContent = { Text(conversation.title) }, supportingContent = { Text("${conversation.agentMode} · ${conversation.updatedAt}") }, leadingContent = { if (conversation.id == currentId) Icon(Icons.Default.Chat, null) }, modifier = Modifier.fillMaxWidth().clickable { open(conversation.id) })
+                HorizontalDivider()
             }
         }
-    )
+    })
 }
 
 @Composable
 private fun AgentRoundCard(round: ReadonlyAgentRound) {
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(10.dp)) {
-            Text("Agent 第 ${round.index} 轮 · ${round.toolCalls.size} 个工具", style = MaterialTheme.typography.labelMedium)
-            round.toolCalls.zip(round.toolOutcomes).forEach { (call, outcome) ->
-                val status = when (outcome) {
-                    is AgentToolOutcome.Success -> with(outcome.result) {
-                        "$startOffset-$endOffsetExclusive/$totalCharacterCount${if (complete) " 完整" else " 下一页 $nextOffset"}"
-                    }
-                    is AgentToolOutcome.Failure -> "失败"
-                }
-                Text("${call.name} · $status", style = MaterialTheme.typography.labelSmall)
-            }
+    Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(10.dp)) {
+        Text("Agent 第 ${round.index} 轮 · ${round.toolCalls.size} 个工具", style = MaterialTheme.typography.labelMedium)
+        round.toolCalls.zip(round.toolOutcomes).forEach { (call, outcome) ->
+            val status = when (outcome) { is AgentToolOutcome.Success -> with(outcome.result) { "$startOffset-$endOffsetExclusive/$totalCharacterCount${if (complete) " 完整" else " 下一页 $nextOffset"}" }; is AgentToolOutcome.Failure -> "失败" }
+            Text("${call.name} · $status", style = MaterialTheme.typography.labelSmall)
         }
-    }
+    } }
 }
 
 @Composable
 private fun FileRangeDialog(document: ActiveWorkspaceDocument?, dismiss: () -> Unit, confirm: (Int, Int) -> Unit) {
-    var startText by remember { mutableStateOf("1") }
-    var endText by remember { mutableStateOf("200") }
-    val start = startText.toIntOrNull()
-    val end = endText.toIntOrNull()
-    AlertDialog(
-        onDismissRequest = dismiss,
-        confirmButton = {
-            TextButton(onClick = { confirm(start!!, end!!) }, enabled = document != null && start != null && end != null && start > 0 && end >= start) { Text("附加") }
-        },
-        title = { Text("附加文件范围") },
-        text = {
-            Row {
-                OutlinedTextField(startText, { startText = it }, label = { Text("起始行") }, modifier = Modifier.weight(1f))
-                OutlinedTextField(endText, { endText = it }, label = { Text("结束行") }, modifier = Modifier.weight(1f))
-            }
-        },
-        dismissButton = { TextButton(onClick = dismiss) { Text("取消") } }
-    )
+    var startText by remember { mutableStateOf("1") }; var endText by remember { mutableStateOf("200") }
+    val start = startText.toIntOrNull(); val end = endText.toIntOrNull()
+    AlertDialog(onDismissRequest = dismiss, confirmButton = { TextButton(onClick = { confirm(start!!, end!!) }, enabled = document != null && start != null && end != null && start > 0 && end >= start) { Text("附加") } }, title = { Text("附加文件范围") }, text = { Row { OutlinedTextField(startText, { startText = it }, label = { Text("起始行") }, modifier = Modifier.weight(1f)); OutlinedTextField(endText, { endText = it }, label = { Text("结束行") }, modifier = Modifier.weight(1f)) } }, dismissButton = { TextButton(onClick = dismiss) { Text("取消") } })
 }
