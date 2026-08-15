@@ -27,6 +27,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.uma.workbench.agent.ActiveWorkspaceDocument
+import com.uma.workbench.agent.ActiveWorkspaceDocumentBridge
 import com.uma.workbench.data.WorkspaceEntity
 import com.uma.workbench.hlpatch.HlpatchClient
 import com.uma.workbench.network.NetworkState
@@ -56,6 +58,11 @@ class MainActivity : ComponentActivity() { override fun onCreate(savedInstanceSt
 @Composable private fun TraeLayout(vm: MainViewModel, aiConfigVm: AiConfigurationViewModel, aiChatVm: AiChatViewModel, ws: WorkspaceEntity, networkState: NetworkState, hlpatchState: HlpatchClient.ConnectionState) {
     var activeBottomTab by remember { mutableIntStateOf(0) }
     val projects by vm.projects.collectAsStateWithLifecycle(); val recentFiles by vm.recentFiles.collectAsStateWithLifecycle(); val openTabs by vm.openTabs.collectAsStateWithLifecycle(); val activeTabId by vm.activeTabId.collectAsStateWithLifecycle(); val importRows by vm.importRows.collectAsStateWithLifecycle(); val importMessage by vm.importMessage.collectAsStateWithLifecycle()
+    val activeDocument = openTabs.firstOrNull { it.id == activeTabId }
+    LaunchedEffect(ws.id, activeDocument?.uri, activeDocument?.title) {
+        ActiveWorkspaceDocumentBridge.publish(activeDocument?.let { ActiveWorkspaceDocument(ws.id, it.uri, it.title) })
+    }
+    DisposableEffect(Unit) { onDispose { ActiveWorkspaceDocumentBridge.publish(null) } }
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> if (uris.isNotEmpty()) vm.importAndIndex(uris) }
     Surface(Modifier.fillMaxSize(), color = WorkbenchColors.bg) { Column {
         Row(Modifier.fillMaxWidth().height(36.dp).background(WorkbenchColors.bgSecondary).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) { IconButton({ vm.closeWorkspace() }, Modifier.size(28.dp)) { Icon(Icons.Default.Home, null, tint = WorkbenchColors.textSecondary) }; Text(ws.name, color = WorkbenchColors.textPrimary); Spacer(Modifier.weight(1f)); Text("hlpatch:${hlpatchState.name} · ${networkState.name}", color = WorkbenchColors.textMuted, style = MaterialTheme.typography.labelSmall) }
