@@ -30,15 +30,6 @@ class SourceImporter(private val resolver: ContentResolver) {
                 if (count > 0) digest.update(buffer, 0, count)
             }
         } ?: error("无法读取文件：$uri")
-        return ImportedSource(uri, name, size, digest.digest().joinToString("") { "%02x".format(it) }, classify(name))
-    }
-
-    private fun classify(name: String): SourceKind = when {
-        name.endsWith(".so", true) -> SourceKind.SO
-        name.contains("global-metadata", true) || name.endsWith(".dat", true) -> SourceKind.IL2CPP_METADATA
-        name.endsWith(".db", true) || name.endsWith(".sqlite", true) -> SourceKind.SQLITE
-        name.endsWith(".zip", true) || name.endsWith(".7z", true) || name.endsWith(".tar", true) -> SourceKind.ARCHIVE
-        name.contains("master", true) -> SourceKind.MASTER
-        else -> SourceKind.SESSION
+        return ImportedSource(uri, name, size, digest.digest().joinToString("") { "%02x".format(it) }, SourceKindClassifier.classify(name))
     }
 }
