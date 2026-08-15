@@ -36,29 +36,24 @@ import com.uma.workbench.ui.*
 import com.uma.workbench.ui.theme.WorkbenchColors
 import com.uma.workbench.ui.theme.WorkbenchTheme
 
-class MainActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); setContent { WorkbenchTheme { WorkbenchApp() } } }
-}
+class MainActivity : ComponentActivity() { override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); setContent { WorkbenchTheme { WorkbenchApp() } } } }
 
-@Composable fun WorkbenchApp(vm: MainViewModel = viewModel(), aiVm: AiConfigurationViewModel = viewModel()) {
+@Composable fun WorkbenchApp(vm: MainViewModel = viewModel(), aiConfigVm: AiConfigurationViewModel = viewModel(), aiChatVm: AiChatViewModel = viewModel()) {
     val workspaces by vm.workspaces.collectAsStateWithLifecycle(); val currentWs by vm.currentWorkspace.collectAsStateWithLifecycle()
     val networkState by vm.networkState.collectAsStateWithLifecycle(); val hlpatchState by vm.hlpatchState.collectAsStateWithLifecycle()
-    if (currentWs == null) WorkspacePicker(workspaces, vm) else TraeLayout(vm, aiVm, currentWs!!, networkState, hlpatchState)
+    if (currentWs == null) WorkspacePicker(workspaces, vm) else TraeLayout(vm, aiConfigVm, aiChatVm, currentWs!!, networkState, hlpatchState)
 }
 
 @Composable private fun WorkspacePicker(workspaces: List<WorkspaceEntity>, vm: MainViewModel) {
     var showCreate by remember { mutableStateOf(false) }; var newName by remember { mutableStateOf("") }
-    Surface(Modifier.fillMaxSize(), color = WorkbenchColors.bg) {
-        Column(Modifier.fillMaxSize().padding(24.dp)) {
-            Text("UMA Workbench", style = MaterialTheme.typography.headlineMedium, color = WorkbenchColors.textPrimary); Text("选择或创建工作区", color = WorkbenchColors.textSecondary); Spacer(Modifier.height(24.dp))
-            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) { items(workspaces, key = { it.id }) { ws -> Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(WorkbenchColors.bgSurface).clickable { vm.openWorkspace(ws.id) }.padding(12.dp)) { Icon(Icons.Default.Folder, null, Modifier.size(16.dp), tint = WorkbenchColors.accent); Spacer(Modifier.width(8.dp)); Text(ws.name, color = WorkbenchColors.textPrimary) } } }
-            Button(onClick = { showCreate = true }) { Icon(Icons.Default.Add, null); Text("新建工作区") }
-        }
-        if (showCreate) AlertDialog(onDismissRequest = { showCreate = false }, title = { Text("新建工作区") }, text = { OutlinedTextField(newName, { newName = it }, label = { Text("名称") }) }, confirmButton = { TextButton(onClick = { if (newName.isNotBlank()) { vm.createWorkspace(newName); showCreate = false } }) { Text("创建") } }, dismissButton = { TextButton(onClick = { showCreate = false }) { Text("取消") } })
-    }
+    Surface(Modifier.fillMaxSize(), color = WorkbenchColors.bg) { Column(Modifier.fillMaxSize().padding(24.dp)) {
+        Text("UMA Workbench", style = MaterialTheme.typography.headlineMedium, color = WorkbenchColors.textPrimary); Text("选择或创建工作区", color = WorkbenchColors.textSecondary); Spacer(Modifier.height(24.dp))
+        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) { items(workspaces, key = { it.id }) { ws -> Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(WorkbenchColors.bgSurface).clickable { vm.openWorkspace(ws.id) }.padding(12.dp)) { Icon(Icons.Default.Folder, null, Modifier.size(16.dp), tint = WorkbenchColors.accent); Spacer(Modifier.width(8.dp)); Text(ws.name, color = WorkbenchColors.textPrimary) } } }
+        Button(onClick = { showCreate = true }) { Icon(Icons.Default.Add, null); Text("新建工作区") }
+    }; if (showCreate) AlertDialog(onDismissRequest = { showCreate = false }, title = { Text("新建工作区") }, text = { OutlinedTextField(newName, { newName = it }, label = { Text("名称") }) }, confirmButton = { TextButton(onClick = { if (newName.isNotBlank()) { vm.createWorkspace(newName); showCreate = false } }) { Text("创建") } }, dismissButton = { TextButton(onClick = { showCreate = false }) { Text("取消") } }) }
 }
 
-@Composable private fun TraeLayout(vm: MainViewModel, aiVm: AiConfigurationViewModel, ws: WorkspaceEntity, networkState: NetworkState, hlpatchState: HlpatchClient.ConnectionState) {
+@Composable private fun TraeLayout(vm: MainViewModel, aiConfigVm: AiConfigurationViewModel, aiChatVm: AiChatViewModel, ws: WorkspaceEntity, networkState: NetworkState, hlpatchState: HlpatchClient.ConnectionState) {
     var activeBottomTab by remember { mutableIntStateOf(0) }
     val projects by vm.projects.collectAsStateWithLifecycle(); val recentFiles by vm.recentFiles.collectAsStateWithLifecycle(); val openTabs by vm.openTabs.collectAsStateWithLifecycle(); val activeTabId by vm.activeTabId.collectAsStateWithLifecycle(); val importRows by vm.importRows.collectAsStateWithLifecycle(); val importMessage by vm.importMessage.collectAsStateWithLifecycle()
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> if (uris.isNotEmpty()) vm.importAndIndex(uris) }
@@ -71,20 +66,22 @@ class MainActivity : ComponentActivity() {
                 Spacer(Modifier.weight(1f)); TextButton(onClick = { importLauncher.launch(arrayOf("application/vnd.android.package-archive", "application/zip", "application/x-tar", "application/octet-stream", "application/json", "text/plain", "*/*")) }) { Icon(Icons.Default.FileOpen, null); Text("导入并索引") }
             }
             Column(Modifier.weight(1f)) {
-                if (activeBottomTab == 4) {
-                    AiConfigurationScreen(aiVm)
-                } else {
-                    if (openTabs.isNotEmpty()) Row(Modifier.fillMaxWidth().height(32.dp).horizontalScroll(rememberScrollState())) { openTabs.forEach { tab -> Text(tab.title, color = if (tab.id == activeTabId) WorkbenchColors.accent else WorkbenchColors.textSecondary, modifier = Modifier.clickable { vm.selectTab(tab.id) }.padding(8.dp)) } }
-                    Box(Modifier.weight(1f).fillMaxWidth()) { ActiveDocumentPane(openTabs, activeTabId) }
-                    when (activeBottomTab) {
-                        1 -> ProtocolHistoryPanel(vm)
-                        2 -> ProtocolPanel(vm)
-                        3 -> Column(Modifier.height(430.dp)) { if (importMessage.isNotBlank()) Text(importMessage, color = WorkbenchColors.textMuted, modifier = Modifier.padding(8.dp)); LazyColumn { item { ImportIndexPanel(importRows, vm::retryImport) } } }
+                when (activeBottomTab) {
+                    4 -> AiChatScreen(aiChatVm) { activeBottomTab = 5 }
+                    5 -> AiConfigurationScreen(aiConfigVm)
+                    else -> {
+                        if (openTabs.isNotEmpty()) Row(Modifier.fillMaxWidth().height(32.dp).horizontalScroll(rememberScrollState())) { openTabs.forEach { tab -> Text(tab.title, color = if (tab.id == activeTabId) WorkbenchColors.accent else WorkbenchColors.textSecondary, modifier = Modifier.clickable { vm.selectTab(tab.id) }.padding(8.dp)) } }
+                        Box(Modifier.weight(1f).fillMaxWidth()) { ActiveDocumentPane(openTabs, activeTabId) }
+                        when (activeBottomTab) {
+                            1 -> ProtocolHistoryPanel(vm)
+                            2 -> ProtocolPanel(vm)
+                            3 -> Column(Modifier.height(430.dp)) { if (importMessage.isNotBlank()) Text(importMessage, color = WorkbenchColors.textMuted, modifier = Modifier.padding(8.dp)); LazyColumn { item { ImportIndexPanel(importRows, vm::retryImport) } } }
+                        }
                     }
                 }
             }
         }
-        Row(Modifier.fillMaxWidth().height(28.dp).background(WorkbenchColors.bgSecondary).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) { listOf("代码", "历史", "协议", "导入索引", "AI 配置").forEachIndexed { index, label -> Text(label, color = if (index == activeBottomTab) WorkbenchColors.accent else WorkbenchColors.textMuted, modifier = Modifier.clickable { activeBottomTab = index }.padding(horizontal = 10.dp)) } }
+        Row(Modifier.fillMaxWidth().height(28.dp).background(WorkbenchColors.bgSecondary).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) { listOf("代码", "历史", "协议", "导入索引", "AI 聊天", "AI 配置").forEachIndexed { index, label -> Text(label, color = if (index == activeBottomTab) WorkbenchColors.accent else WorkbenchColors.textMuted, modifier = Modifier.clickable { activeBottomTab = index; if (index == 4) aiChatVm.refreshConfiguration() }.padding(horizontal = 10.dp)) } }
     } }
 }
 
