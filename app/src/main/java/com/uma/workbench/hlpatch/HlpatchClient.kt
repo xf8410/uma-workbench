@@ -6,6 +6,7 @@ import com.uma.workbench.data.HlpatchSnapshotEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
+import java.net.URLEncoder
 import java.util.UUID
 
 /** HTTP client to hlpatch SO at 127.0.0.1:18765. Features 361-400. */
@@ -30,14 +31,7 @@ class HlpatchClient(private val db: AppDatabase, private val baseUrl: String = "
         )
         val observations = probes.map { (path, required) ->
             val result = get(path)
-            HlpatchEndpointCapability(
-                path = path,
-                required = required,
-                supported = result.ok,
-                statusCode = result.statusCode,
-                responseBody = result.body,
-                error = result.error
-            )
+            HlpatchEndpointCapability(path, required, result.ok, result.statusCode, result.body, result.error)
         }
         val compatibility = HlpatchCapabilityClassifier.classify(observations)
         state = when (compatibility) {
@@ -46,25 +40,33 @@ class HlpatchClient(private val db: AppDatabase, private val baseUrl: String = "
             HlpatchCompatibility.INCOMPATIBLE -> ConnectionState.INCOMPATIBLE
             HlpatchCompatibility.UNREACHABLE, HlpatchCompatibility.NOT_CHECKED -> ConnectionState.DISCONNECTED
         }
-        return HlpatchCapabilityReport(
-            checkedAt = System.currentTimeMillis(),
-            compatibility = compatibility,
-            endpoints = observations
-        )
+        return HlpatchCapabilityReport(System.currentTimeMillis(), compatibility, observations)
     }
 
     suspend fun il2cppTree(name: String, depth: Int = 2): HlpatchResult =
-        get("/il2cpp/tree?name=${java.net.URLEncoder.encode(name, "UTF-8")}&depth=$depth")
+        get("/il2cpp/tree?name=${encode(name)}&depth=$depth")
 
     suspend fun il2cppSearch(query: String, limit: Int = 50): HlpatchResult =
-        get("/il2cpp/search?q=${java.net.URLEncoder.encode(query, "UTF-8")}&limit=$limit")
+        get("/il2cpp/search?q=${encode(query)}&limit=$limit")
+
+    /** Uses the observed class endpoint and preserves the complete response even if its schema is unknown. */
+    suspend fun il2cppClasses(query: String): Il2CppExplorerResult =
+        il2cppExplorerQuery(Il2CppExplorerOperation.SEARCH_CLASSES, query, "/il2cpp/search?q=${encode(query)}")
+
+    suspend fun il2cppFields(className: String): Il2CppExplorerResult =
+        il2cppExplorerQuery(Il2CppExplorerOperation.READ_FIELDS, className, "/il2cpp/fields?class=${encode(className)}")
+
+    suspend fun il2cppMethods(className: String): Il2CppExplorerResult =
+        il2cppExplorerQuery(Il2CppExplorerOperation.READ_METHODS, className, "/il2cpp/methods?class=${encode(className)}")
+
+    private suspend fun il2cppExplorerQuery(operation: Il2CppExplorerOperation, query: String, endpoint: String): Il2CppExplorerResult {
+        val result = get(endpoint)
+        return Il2CppExplorerResult(operation, query, endpoint, result.statusCode, result.body, result.error, System.currentTimeMillis())
+    }
 
     suspend fun snapshot(): HlpatchResult = get("/debug/ramen_planner_state")
-
     suspend fun md5Log(): HlpatchResult = get("/api/md5log")
-
-    suspend fun mdbRaw(sql: String): HlpatchResult =
-        get("/mdb/raw?sql=${java.net.URLEncoder.encode(sql, "UTF-8")}")
+    suspend fun mdbRaw(sql: String): HlpatchResult = get("/mdb/raw?sql=${encode(sql)}")
 
     suspend fun installHooks(): HlpatchResult {
         val r1 = post("/api/md5log/install", "")
@@ -79,9 +81,8 @@ class HlpatchClient(private val db: AppDatabase, private val baseUrl: String = "
     private suspend fun request(method: String, path: String, body: String?): HlpatchResult = withContext(Dispatchers.IO) {
         state = ConnectionState.CONNECTING
         try {
-            val url = java.net.URL(baseUrl + path)
-            val conn = (url.openConnection() as java.net.HttpURLConnection).apply {
-                this.requestMethod = method
+            val conn = (java.net.URL(baseUrl + path).openConnection() as java.net.HttpURLConnection).apply {
+                requestMethod = method
                 connectTimeout = 3_000
                 readTimeout = 10_000
                 if (body != null) { doOutput = true; setRequestProperty("Content-Type", "application/json") }
@@ -90,12 +91,7 @@ class HlpatchClient(private val db: AppDatabase, private val baseUrl: String = "
             val code = conn.responseCode
             val respBody = (if (code in 200..299) conn.inputStream else conn.errorStream)?.bufferedReader()?.use { it.readText() } ?: ""
             conn.disconnect()
-
-            db.hlpatchSnapshots().upsert(HlpatchSnapshotEntity(
-                id = UUID.randomUUID().toString(), endpoint = path, responseBody = respBody, statusCode = code,
-                capturedAt = System.currentTimeMillis()
-            ))
-
+            db.hlpatchSnapshots().upsert(HlpatchSnapshotEntity(UUID.randomUUID().toString(), path, respBody, code, System.currentTimeMillis()))
             state = if (code in 200..299) ConnectionState.READY else ConnectionState.DEGRADED
             HlpatchResult(code in 200..299, code, respBody, null)
         } catch (e: Exception) {
@@ -106,6 +102,7 @@ class HlpatchClient(private val db: AppDatabase, private val baseUrl: String = "
     }
 
     fun observeSnapshots(): Flow<List<HlpatchSnapshotEntity>> = db.hlpatchSnapshots().observeRecent()
+    private fun encode(value: String): String = URLEncoder.encode(value, "UTF-8")
 }
 
 data class HlpatchResult(val ok: Boolean, val statusCode: Int, val body: String, val error: String?) {
