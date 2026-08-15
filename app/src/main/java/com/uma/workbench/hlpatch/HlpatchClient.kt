@@ -40,7 +40,7 @@ class HlpatchClient(private val db: AppDatabase, private val baseUrl: String = "
     }
 
     private suspend fun get(path: String): HlpatchResult = request("GET", path, null)
-    private suspend fun post(path: String, body: String): HlpatchResult = request("POST", path, body)
+    suspend fun post(path: String, body: String): HlpatchResult = request("POST", path, body)
 
     private suspend fun request(method: String, path: String, body: String?): HlpatchResult = withContext(Dispatchers.IO) {
         state = ConnectionState.CONNECTING
