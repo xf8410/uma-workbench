@@ -40,10 +40,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); setContent { WorkbenchTheme { WorkbenchApp() } } }
 }
 
-@Composable fun WorkbenchApp(vm: MainViewModel = viewModel()) {
+@Composable fun WorkbenchApp(vm: MainViewModel = viewModel(), aiVm: AiConfigurationViewModel = viewModel()) {
     val workspaces by vm.workspaces.collectAsStateWithLifecycle(); val currentWs by vm.currentWorkspace.collectAsStateWithLifecycle()
     val networkState by vm.networkState.collectAsStateWithLifecycle(); val hlpatchState by vm.hlpatchState.collectAsStateWithLifecycle()
-    if (currentWs == null) WorkspacePicker(workspaces, vm) else TraeLayout(vm, currentWs!!, networkState, hlpatchState)
+    if (currentWs == null) WorkspacePicker(workspaces, vm) else TraeLayout(vm, aiVm, currentWs!!, networkState, hlpatchState)
 }
 
 @Composable private fun WorkspacePicker(workspaces: List<WorkspaceEntity>, vm: MainViewModel) {
@@ -58,7 +58,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@Composable private fun TraeLayout(vm: MainViewModel, ws: WorkspaceEntity, networkState: NetworkState, hlpatchState: HlpatchClient.ConnectionState) {
+@Composable private fun TraeLayout(vm: MainViewModel, aiVm: AiConfigurationViewModel, ws: WorkspaceEntity, networkState: NetworkState, hlpatchState: HlpatchClient.ConnectionState) {
     var activeBottomTab by remember { mutableIntStateOf(0) }
     val projects by vm.projects.collectAsStateWithLifecycle(); val recentFiles by vm.recentFiles.collectAsStateWithLifecycle(); val openTabs by vm.openTabs.collectAsStateWithLifecycle(); val activeTabId by vm.activeTabId.collectAsStateWithLifecycle(); val importRows by vm.importRows.collectAsStateWithLifecycle(); val importMessage by vm.importMessage.collectAsStateWithLifecycle()
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> if (uris.isNotEmpty()) vm.importAndIndex(uris) }
@@ -71,16 +71,20 @@ class MainActivity : ComponentActivity() {
                 Spacer(Modifier.weight(1f)); TextButton(onClick = { importLauncher.launch(arrayOf("application/vnd.android.package-archive", "application/zip", "application/x-tar", "application/octet-stream", "application/json", "text/plain", "*/*")) }) { Icon(Icons.Default.FileOpen, null); Text("导入并索引") }
             }
             Column(Modifier.weight(1f)) {
-                if (openTabs.isNotEmpty()) Row(Modifier.fillMaxWidth().height(32.dp).horizontalScroll(rememberScrollState())) { openTabs.forEach { tab -> Text(tab.title, color = if (tab.id == activeTabId) WorkbenchColors.accent else WorkbenchColors.textSecondary, modifier = Modifier.clickable { vm.selectTab(tab.id) }.padding(8.dp)) } }
-                Box(Modifier.weight(1f).fillMaxWidth()) { ActiveDocumentPane(openTabs, activeTabId) }
-                when (activeBottomTab) {
-                    1 -> ProtocolHistoryPanel(vm)
-                    2 -> ProtocolPanel(vm)
-                    3 -> Column(Modifier.height(430.dp)) { if (importMessage.isNotBlank()) Text(importMessage, color = WorkbenchColors.textMuted, modifier = Modifier.padding(8.dp)); LazyColumn { item { ImportIndexPanel(importRows, vm::retryImport) } } }
+                if (activeBottomTab == 4) {
+                    AiConfigurationScreen(aiVm)
+                } else {
+                    if (openTabs.isNotEmpty()) Row(Modifier.fillMaxWidth().height(32.dp).horizontalScroll(rememberScrollState())) { openTabs.forEach { tab -> Text(tab.title, color = if (tab.id == activeTabId) WorkbenchColors.accent else WorkbenchColors.textSecondary, modifier = Modifier.clickable { vm.selectTab(tab.id) }.padding(8.dp)) } }
+                    Box(Modifier.weight(1f).fillMaxWidth()) { ActiveDocumentPane(openTabs, activeTabId) }
+                    when (activeBottomTab) {
+                        1 -> ProtocolHistoryPanel(vm)
+                        2 -> ProtocolPanel(vm)
+                        3 -> Column(Modifier.height(430.dp)) { if (importMessage.isNotBlank()) Text(importMessage, color = WorkbenchColors.textMuted, modifier = Modifier.padding(8.dp)); LazyColumn { item { ImportIndexPanel(importRows, vm::retryImport) } } }
+                    }
                 }
             }
         }
-        Row(Modifier.fillMaxWidth().height(28.dp).background(WorkbenchColors.bgSecondary), verticalAlignment = Alignment.CenterVertically) { listOf("代码", "历史", "协议", "导入索引").forEachIndexed { index, label -> Text(label, color = if (index == activeBottomTab) WorkbenchColors.accent else WorkbenchColors.textMuted, modifier = Modifier.clickable { activeBottomTab = index }.padding(horizontal = 10.dp)) } }
+        Row(Modifier.fillMaxWidth().height(28.dp).background(WorkbenchColors.bgSecondary).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) { listOf("代码", "历史", "协议", "导入索引", "AI 配置").forEachIndexed { index, label -> Text(label, color = if (index == activeBottomTab) WorkbenchColors.accent else WorkbenchColors.textMuted, modifier = Modifier.clickable { activeBottomTab = index }.padding(horizontal = 10.dp)) } }
     } }
 }
 
