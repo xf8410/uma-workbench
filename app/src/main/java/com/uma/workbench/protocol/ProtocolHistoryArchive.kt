@@ -34,7 +34,7 @@ object ProtocolHistoryArchive {
      * Reads one complete physical line at a time. Parsing and persistence failures retain the
      * complete source line and processing continues with every later line.
      */
-    fun import(reader: Reader, consume: (ProtocolHistoryRecord) -> Unit): ProtocolArchiveImportResult {
+    fun importRecords(reader: Reader, consume: (ProtocolHistoryRecord) -> Unit): ProtocolArchiveImportResult {
         var lineNumber = 0L
         var imported = 0L
         val errors = mutableListOf<ProtocolArchiveLineError>()
