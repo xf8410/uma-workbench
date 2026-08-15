@@ -11,17 +11,7 @@ import com.uma.workbench.data.ProjectEntity
 import com.uma.workbench.data.RecentFileEntity
 import com.uma.workbench.hlpatch.HlpatchClient
 import com.uma.workbench.network.NetworkState
-import com.uma.workbench.protocol.GameEndpoint
-import com.uma.workbench.protocol.GameRequest
-import com.uma.workbench.protocol.ProtocolHistoryInspector
-import com.uma.workbench.protocol.ProtocolHistoryLoadState
-import com.uma.workbench.protocol.ProtocolHistoryRecord
-import com.uma.workbench.protocol.ProtocolHistoryStore
-import com.uma.workbench.protocol.ProtocolHistoryTimeline
-import com.uma.workbench.protocol.ProtocolLogEntry
-import com.uma.workbench.protocol.ProtocolSender
-import com.uma.workbench.protocol.SessionManager
-import com.uma.workbench.protocol.SidDumper
+import com.uma.workbench.protocol.*
 import com.uma.workbench.workspace.WorkspaceManager
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
@@ -72,7 +62,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val protocolHistoryTimeline = ProtocolHistoryTimeline(protocolHistoryStore::all)
     private val protocolHistoryInspector = ProtocolHistoryInspector()
     private val protocolSender = ProtocolSender(application, db, hlpatchClient, protocolHistoryStore)
-    private val sidDumper = SidDumper(db, hlpatchClient, sessionManager)
+    private val sidHealthProbe = SidHealthProbe()
 
     val activeSession = sessionManager.activeSession
     val protocolLogs: StateFlow<List<ProtocolLogEntry>> = protocolSender.logs
@@ -80,6 +70,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val protocolHistoryLoadState: StateFlow<ProtocolHistoryLoadState> = protocolHistoryTimeline.loadState
     val selectedProtocolHistoryIds: StateFlow<List<String>> = protocolHistoryInspector.selectedIds
     val dumpState: MutableStateFlow<String> = MutableStateFlow("")
+    val sidHealthState: MutableStateFlow<SidHealthCheckState> = MutableStateFlow(SidHealthCheckState())
 
     init { reloadProtocolHistory() }
 
@@ -156,6 +147,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             sessionManager.importFromHlpatch(sid, vid?.toLongOrNull() ?: 0L, headers)
             dumpState.value = "已 dump SID: $sid"
         } else dumpState.value = "未找到 SID"
+    }
+
+    fun checkSidHealth(sid: String, viewerId: Long?) = viewModelScope.launch {
+        val exactSid = sid
+        val exactViewerId = viewerId ?: 0L
+        sidHealthState.value = SidHealthCheckState(running = true, checkedSid = exactSid, viewerId = viewerId)
+        val active = activeSession.value
+        val session = if (active != null && active.sid == exactSid && active.viewerId == exactViewerId) active else GameSession(
+            sid = exactSid,
+            viewerId = exactViewerId,
+            accountToken = null,
+            inheritCode = null,
+            appVer = active?.appVer ?: "2.29.0",
+            resVer = active?.resVer,
+            resVerHash = active?.resVerHash,
+            deviceId = active?.deviceId,
+            deviceName = active?.deviceName,
+            platformOsVersion = active?.platformOsVersion,
+            capturedAt = System.currentTimeMillis(),
+            source = SessionSource.MANUAL_INPUT,
+            bound = exactViewerId > 0
+        )
+        runCatching { sidHealthProbe.probe(session, protocolSender::sendViaHlpatch) }
+            .onSuccess { result -> sidHealthState.value = SidHealthCheckState(checkedSid = exactSid, viewerId = viewerId, result = result) }
+            .onFailure { error -> sidHealthState.value = SidHealthCheckState(checkedSid = exactSid, viewerId = viewerId, error = error.stackTraceToString()) }
+        protocolHistoryTimeline.reload()
     }
 
     fun sendProtocolRequest(endpoint: String, sid: String, viewerId: Long?, body: String, channel: Int) = viewModelScope.launch {
