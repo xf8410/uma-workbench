@@ -11,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddComment
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
@@ -36,6 +37,7 @@ fun AiChatScreen(vm: AiChatViewModel, openConfiguration: () -> Unit) {
     val loadingAttachment by vm.loadingAttachment.collectAsStateWithLifecycle()
     var input by remember { mutableStateOf("") }
     var showRangeDialog by remember { mutableStateOf(false) }
+    var showSearchDialog by remember { mutableStateOf(false) }
     var showModelContext by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val selection = catalog.defaultModel
@@ -58,144 +60,67 @@ fun AiChatScreen(vm: AiChatViewModel, openConfiguration: () -> Unit) {
             items(messages, key = { it.id }) { message ->
                 Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(10.dp)) { Text(if (message.role.equals("user", true)) "你" else "AI", style = MaterialTheme.typography.labelMedium); Text(message.content); if (!message.role.equals("user", true)) Text(listOfNotNull(message.status, message.modelUsed, message.tokenCount?.let { "Token $it" }).joinToString(" · "), style = MaterialTheme.typography.labelSmall) } }
             }
-            if (liveVisible) item("live-${generation.requestId}") {
-                Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(10.dp)) { Text("AI", style = MaterialTheme.typography.labelMedium); Text(generation.completeText); Text("${generation.statusLabel} · ${generation.usageLabel}", style = MaterialTheme.typography.labelSmall) } }
-            }
+            if (liveVisible) item("live-${generation.requestId}") { Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(10.dp)) { Text("AI", style = MaterialTheme.typography.labelMedium); Text(generation.completeText); Text("${generation.statusLabel} · ${generation.usageLabel}", style = MaterialTheme.typography.labelSmall) } } }
         }
-        ContextAttachmentPanel(
-            activeDocument = activeDocument,
-            attachments = attachments,
-            loading = loadingAttachment,
-            message = attachmentMessage,
-            onAddRange = { showRangeDialog = true },
-            onRemove = vm::removeAttachment
-        )
+        ContextAttachmentPanel(activeDocument, attachments, loadingAttachment, attachmentMessage, { showRangeDialog = true }, { showSearchDialog = true }, vm::removeAttachment)
         if (generation.phase != AiGenerationPhase.IDLE) Text("${generation.statusLabel} · ${generation.usageLabel}", style = MaterialTheme.typography.labelSmall)
         Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             OutlinedTextField(input, { input = it }, label = { Text("发送消息") }, enabled = generation.canSend, modifier = Modifier.weight(1f), minLines = 1, maxLines = 5)
-            IconButton(onClick = {
-                if (generation.canInterrupt) vm.interrupt()
-                else if (input.isNotBlank() && selection != null) { vm.send(input); input = "" }
-            }, enabled = generation.canInterrupt || (input.isNotBlank() && selection != null)) {
-                Icon(if (generation.canInterrupt) Icons.Default.Stop else Icons.Default.Send, if (generation.canInterrupt) "停止生成" else "发送")
-            }
+            IconButton(onClick = { if (generation.canInterrupt) vm.interrupt() else if (input.isNotBlank() && selection != null) { vm.send(input); input = "" } }, enabled = generation.canInterrupt || (input.isNotBlank() && selection != null)) { Icon(if (generation.canInterrupt) Icons.Default.Stop else Icons.Default.Send, if (generation.canInterrupt) "停止生成" else "发送") }
         }
     }
-    if (showRangeDialog) CurrentFileRangeDialog(
-        document = activeDocument,
-        onDismiss = { showRangeDialog = false },
-        onConfirm = { start, end -> vm.attachCurrentFileRange(start, end); showRangeDialog = false }
-    )
-    if (showModelContext) ModelContextDialog(
-        model = selection?.modelId,
-        providerName = provider?.name,
-        history = messages,
-        draft = input,
-        attachments = attachments,
-        onDismiss = { showModelContext = false }
-    )
+    if (showRangeDialog) CurrentFileRangeDialog(activeDocument, { showRangeDialog = false }) { start, end -> vm.attachCurrentFileRange(start, end); showRangeDialog = false }
+    if (showSearchDialog) WorkspaceSearchDialog(vm) { showSearchDialog = false }
+    if (showModelContext) ModelContextDialog(selection?.modelId, provider?.name, messages, input, attachments) { showModelContext = false }
 }
 
 @Composable
-private fun ModelContextDialog(
-    model: String?,
-    providerName: String?,
-    history: List<MessageEntity>,
-    draft: String,
-    attachments: List<WorkspaceContextAttachment>,
-    onDismiss: () -> Unit
-) {
+private fun ModelContextDialog(model: String?, providerName: String?, history: List<MessageEntity>, draft: String, attachments: List<WorkspaceContextAttachment>, onDismiss: () -> Unit) {
     val exactDraft = WorkspaceContextPromptComposer.compose(draft, attachments)
     val completeContext = buildString {
-        history.forEachIndexed { index, message ->
-            append("[$index] role=${message.role.lowercase()} characters=${message.content.length}\n")
-            append(message.content)
-            append("\n\n")
-        }
-        append("[${history.size}] role=user characters=${exactDraft.length} draft=true\n")
-        append(exactDraft)
+        history.forEachIndexed { index, message -> append("[$index] role=${message.role.lowercase()} characters=${message.content.length}\n${message.content}\n\n") }
+        append("[${history.size}] role=user characters=${exactDraft.length} draft=true\n$exactDraft")
     }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("客户端可见的模型上下文") },
-        text = {
-            Column(Modifier.fillMaxWidth().fillMaxHeight(0.8f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("提供商：${providerName ?: "未选择"} · 模型：${model ?: "未选择"}", style = MaterialTheme.typography.labelMedium)
-                Text("消息 ${history.size + 1} 条 · 完整字符数 ${completeContext.length} · 待发送附件 ${attachments.size} 个", style = MaterialTheme.typography.labelSmall)
-                Text("以下内容是客户端在点击发送时构造的完整消息上下文。服务商未通过 API 返回的隐藏指令和模型内部状态不在客户端可读取范围内。", style = MaterialTheme.typography.labelSmall)
-                Surface(Modifier.weight(1f).fillMaxWidth()) {
-                    Text(
-                        completeContext,
-                        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).horizontalScroll(rememberScrollState()).padding(8.dp),
-                        fontFamily = FontFamily.Monospace,
-                        softWrap = false
-                    )
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("关闭") } }
-    )
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("客户端可见的模型上下文") }, text = {
+        Column(Modifier.fillMaxWidth().fillMaxHeight(0.8f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("提供商：${providerName ?: "未选择"} · 模型：${model ?: "未选择"}", style = MaterialTheme.typography.labelMedium)
+            Text("消息 ${history.size + 1} 条 · 完整字符数 ${completeContext.length} · 待发送附件 ${attachments.size} 个", style = MaterialTheme.typography.labelSmall)
+            Text("以下内容是客户端点击发送时构造的完整消息上下文。服务商未通过 API 返回的隐藏指令和模型内部状态不在客户端可读取范围内。", style = MaterialTheme.typography.labelSmall)
+            Surface(Modifier.weight(1f).fillMaxWidth()) { Text(completeContext, Modifier.fillMaxSize().verticalScroll(rememberScrollState()).horizontalScroll(rememberScrollState()).padding(8.dp), fontFamily = FontFamily.Monospace, softWrap = false) }
+        }
+    }, confirmButton = { TextButton(onClick = onDismiss) { Text("关闭") } })
 }
 
 @Composable
-private fun ContextAttachmentPanel(
-    activeDocument: ActiveWorkspaceDocument?,
-    attachments: List<WorkspaceContextAttachment>,
-    loading: Boolean,
-    message: String,
-    onAddRange: () -> Unit,
-    onRemove: (String) -> Unit
-) {
+private fun ContextAttachmentPanel(activeDocument: ActiveWorkspaceDocument?, attachments: List<WorkspaceContextAttachment>, loading: Boolean, message: String, onAddRange: () -> Unit, onSearch: () -> Unit, onRemove: (String) -> Unit) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text("上下文附件（本轮实际发送）", style = MaterialTheme.typography.labelMedium)
-            TextButton(onClick = onAddRange, enabled = activeDocument != null && !loading) {
-                Icon(Icons.Default.AttachFile, null)
-                Text(if (loading) "读取中" else "当前文件范围")
+            Row {
+                TextButton(onClick = onSearch, enabled = activeDocument != null && !loading) { Icon(Icons.Default.Search, null); Text("搜索") }
+                TextButton(onClick = onAddRange, enabled = activeDocument != null && !loading) { Icon(Icons.Default.AttachFile, null); Text(if (loading) "读取中" else "当前文件范围") }
             }
         }
         if (activeDocument == null) Text("当前没有打开文件", style = MaterialTheme.typography.labelSmall)
-        attachments.forEach { attachment ->
-            Card(Modifier.fillMaxWidth()) {
-                Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Column(Modifier.weight(1f)) {
-                        Text("${attachment.title} L${attachment.startLine}-L${attachment.endLine}", style = MaterialTheme.typography.labelMedium)
-                        Text(attachment.uri, style = MaterialTheme.typography.labelSmall)
-                        Text("实际发送 ${attachment.sentCharacterCount} 字符 · 完整文件 ${attachment.completeCharacterCount} 字符 / ${attachment.totalLines} 行", style = MaterialTheme.typography.labelSmall)
-                    }
-                    IconButton(onClick = { onRemove(attachment.id) }) { Icon(Icons.Default.Close, "取消选择此附件") }
-                }
+        attachments.forEach { attachment -> Card(Modifier.fillMaxWidth()) {
+            Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                Column(Modifier.weight(1f)) { Text("${attachment.title} L${attachment.startLine}-L${attachment.endLine}", style = MaterialTheme.typography.labelMedium); Text(attachment.uri, style = MaterialTheme.typography.labelSmall); Text("实际发送 ${attachment.sentCharacterCount} 字符 · 完整文件 ${attachment.completeCharacterCount} 字符 / ${attachment.totalLines} 行", style = MaterialTheme.typography.labelSmall) }
+                IconButton(onClick = { onRemove(attachment.id) }) { Icon(Icons.Default.Close, "取消选择此附件") }
             }
-        }
+        } }
         if (message.isNotBlank()) Text(message, style = MaterialTheme.typography.labelSmall, maxLines = 4)
     }
 }
 
 @Composable
-private fun CurrentFileRangeDialog(
-    document: ActiveWorkspaceDocument?,
-    onDismiss: () -> Unit,
-    onConfirm: (Int, Int) -> Unit
-) {
-    var startText by remember { mutableStateOf("1") }
-    var endText by remember { mutableStateOf("200") }
-    val start = startText.toIntOrNull()
-    val end = endText.toIntOrNull()
-    val valid = document != null && start != null && end != null && start >= 1 && end >= start
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("附加当前文件范围") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(document?.let { "${it.title}\n${it.uri}" } ?: "当前没有打开文件", style = MaterialTheme.typography.bodySmall)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(startText, { startText = it }, label = { Text("起始行") }, singleLine = true, modifier = Modifier.weight(1f))
-                    OutlinedTextField(endText, { endText = it }, label = { Text("结束行") }, singleLine = true, modifier = Modifier.weight(1f))
-                }
-                Text("只有确认后的实际行范围会进入本轮附件；卡片会显示完整文件长度和实际发送长度。", style = MaterialTheme.typography.labelSmall)
-            }
-        },
-        confirmButton = { TextButton(onClick = { onConfirm(start!!, end!!) }, enabled = valid) { Text("附加") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
-    )
+private fun CurrentFileRangeDialog(document: ActiveWorkspaceDocument?, onDismiss: () -> Unit, onConfirm: (Int, Int) -> Unit) {
+    var startText by remember { mutableStateOf("1") }; var endText by remember { mutableStateOf("200") }
+    val start = startText.toIntOrNull(); val end = endText.toIntOrNull(); val valid = document != null && start != null && end != null && start >= 1 && end >= start
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("附加当前文件范围") }, text = {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(document?.let { "${it.title}\n${it.uri}" } ?: "当前没有打开文件", style = MaterialTheme.typography.bodySmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { OutlinedTextField(startText, { startText = it }, label = { Text("起始行") }, singleLine = true, modifier = Modifier.weight(1f)); OutlinedTextField(endText, { endText = it }, label = { Text("结束行") }, singleLine = true, modifier = Modifier.weight(1f)) }
+            Text("只有确认后的实际行范围会进入本轮附件；卡片会显示完整文件长度和实际发送长度。", style = MaterialTheme.typography.labelSmall)
+        }
+    }, confirmButton = { TextButton(onClick = { onConfirm(start!!, end!!) }, enabled = valid) { Text("附加") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } })
 }
