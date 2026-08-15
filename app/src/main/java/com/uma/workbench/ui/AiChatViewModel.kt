@@ -97,11 +97,26 @@ class AiChatViewModel(application: Application) : AndroidViewModel(application) 
         refreshConfiguration()
         val selection = _catalog.value.defaultModel ?: return
         viewModelScope.launch {
+            val selectedAttachments = _attachments.value.toList()
+            val exactPrompt = WorkspaceContextPromptComposer.compose(completeText, selectedAttachments)
+            val attachmentMetadata = WorkspaceContextPromptComposer.metadataJson(selectedAttachments)
             val conversationId = ensureConversation(completeText)
-            val history = messages.value.map { AiPromptMessage(it.role.lowercase(), it.content) } + AiPromptMessage("user", completeText)
-            repository.addMessage(MessageEntity(UUID.randomUUID().toString(), conversationId, null, null, repository.nextMessageSequence(conversationId), "user", completeText, createdAt = System.currentTimeMillis()))
+            val history = messages.value.map { AiPromptMessage(it.role.lowercase(), it.content) } + AiPromptMessage("user", exactPrompt)
+            repository.addMessage(MessageEntity(
+                id = UUID.randomUUID().toString(),
+                conversationId = conversationId,
+                runId = null,
+                requestId = null,
+                sequence = repository.nextMessageSequence(conversationId),
+                role = "user",
+                content = completeText,
+                createdAt = System.currentTimeMillis(),
+                toolCallsJson = attachmentMetadata
+            ))
             val requestId = UUID.randomUUID().toString()
             if (!controller.send(AiGenerationRequest(requestId, history, selection.modelId))) return@launch
+            _attachments.value = emptyList()
+            _attachmentMessage.value = if (selectedAttachments.isEmpty()) "" else "本轮 ${selectedAttachments.size} 个上下文附件已实际注入请求"
             val terminal = generation.first { it.requestId == requestId && it.phase != AiGenerationPhase.GENERATING && it.phase != AiGenerationPhase.IDLE }
             repository.addMessage(MessageEntity(
                 id = UUID.randomUUID().toString(), conversationId = conversationId, runId = requestId, requestId = requestId,
