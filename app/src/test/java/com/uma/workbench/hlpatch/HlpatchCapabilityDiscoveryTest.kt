@@ -55,4 +55,19 @@ class HlpatchCapabilityDiscoveryTest {
         assertTrue(text.contains(completeError))
         assertTrue(text.contains("/endpoint/239"))
     }
+
+    @Test fun presentationPreservesTrailingWhitespaceInFinalError() {
+        val completeBody = "response with trailing bytes \n\t "
+        val completeError = "stack trace final bytes\n\n  \t"
+        val report = HlpatchCapabilityReport(
+            checkedAt = 8410L,
+            compatibility = HlpatchCompatibility.DEGRADED,
+            endpoints = listOf(endpoint("/health", true, false, status = 500, body = completeBody, error = completeError))
+        )
+
+        val text = HlpatchCapabilityClassifier.presentation(report)
+
+        assertTrue(text.contains("完整响应体：$completeBody\n完整错误："))
+        assertTrue(text.endsWith("完整错误：$completeError\n"))
+    }
 }
