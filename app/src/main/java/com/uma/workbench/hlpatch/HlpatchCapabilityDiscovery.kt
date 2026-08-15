@@ -46,6 +46,11 @@ object HlpatchCapabilityClassifier {
         return if (endpoints.all { it.supported }) HlpatchCompatibility.COMPATIBLE else HlpatchCompatibility.DEGRADED
     }
 
+    /**
+     * Returns the complete presentation without trimEnd/trim so trailing whitespace that belongs to
+     * a response body or stack trace is not silently removed. Structural newlines are added only
+     * between labels and records; endpoint values themselves are appended unchanged.
+     */
     fun presentation(report: HlpatchCapabilityReport): String = buildString {
         appendLine(report.summary)
         report.checkedAt?.let { appendLine("检测时间：$it") }
@@ -54,8 +59,12 @@ object HlpatchCapabilityClassifier {
             appendLine("必需：${endpoint.required}")
             appendLine("支持：${endpoint.supported}")
             appendLine("HTTP：${endpoint.statusCode}")
-            appendLine("完整响应体：${endpoint.responseBody}")
-            appendLine("完整错误：${endpoint.error ?: ""}")
+            append("完整响应体：")
+            append(endpoint.responseBody)
+            append('\n')
+            append("完整错误：")
+            append(endpoint.error ?: "")
+            append('\n')
         }
-    }.trimEnd()
+    }
 }
