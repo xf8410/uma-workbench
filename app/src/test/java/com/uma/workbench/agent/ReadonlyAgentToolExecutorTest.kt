@@ -48,11 +48,13 @@ class ReadonlyAgentToolExecutorTest {
     }
 
     @Test(expected = IllegalArgumentException::class)
-    fun rejectsTurnAboveCallBudgetBeforeExecution() = runBlocking {
-        ReadonlyAgentToolExecutor(source, AgentToolExecutionLimits(maxCallsPerTurn = 1)).executeTurn(listOf(
-            AiToolCall(0, "a", "read_current_file", "{}"),
-            AiToolCall(1, "b", "list_workspace_files", "{}")
-        ))
+    fun rejectsTurnAboveCallBudgetBeforeExecution() {
+        runBlocking {
+            ReadonlyAgentToolExecutor(source, AgentToolExecutionLimits(maxCallsPerTurn = 1)).executeTurn(listOf(
+                AiToolCall(0, "a", "read_current_file", "{}"),
+                AiToolCall(1, "b", "list_workspace_files", "{}")
+            ))
+        }
     }
 
     @Test fun invalidRangeIsVisibleFailure() = runBlocking {
