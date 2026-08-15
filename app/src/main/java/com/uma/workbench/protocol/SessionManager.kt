@@ -61,6 +61,7 @@ class SessionManager(private val db: AppDatabase) {
     /** 诊断 SID 状态 */
     fun diagnoseSid(session: GameSession): SidDiagnosis {
         return when {
+            session.sid.isEmpty() -> SidDiagnosis.MISSING
             session.viewerId == 0L -> SidDiagnosis.ANONYMOUS
             !session.bound -> SidDiagnosis.UNBOUND
             session.expired -> SidDiagnosis.EXPIRED
@@ -89,5 +90,7 @@ enum class SidDiagnosis(val label: String, val description: String) {
     ACTIVE("活跃", "SID 已绑定 viewer_id，可直接使用"),
     ANONYMOUS("匿名", "viewer_id=0，SID 未绑定，只能用于 boot"),
     UNBOUND("未绑定", "SID 存在但未关联到 viewer_id，需重新登录"),
-    EXPIRED("已过期", "SID 绑定已过期，需重新获取")
+    EXPIRED("已过期", "SID 绑定已过期，需重新获取"),
+    MISSING("缺少 SID", "当前会话没有 SID"),
+    UNKNOWN("未知", "请求已完成，但响应不足以确认 SID 状态")
 }
