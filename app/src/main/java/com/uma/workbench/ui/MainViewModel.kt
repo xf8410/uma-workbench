@@ -9,6 +9,7 @@ import com.uma.workbench.data.*
 import com.uma.workbench.data.OpenTabEntity
 import com.uma.workbench.data.ProjectEntity
 import com.uma.workbench.data.RecentFileEntity
+import com.uma.workbench.hlpatch.HlpatchCapabilityReport
 import com.uma.workbench.hlpatch.HlpatchClient
 import com.uma.workbench.network.NetworkState
 import com.uma.workbench.protocol.*
@@ -56,6 +57,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val networkState = app.networkState.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), NetworkState.ONLINE)
     private val hlpatchClient = HlpatchClient(db)
     val hlpatchState = MutableStateFlow(hlpatchClient.state)
+    val hlpatchCapabilities = MutableStateFlow(HlpatchCapabilityReport())
 
     private val sessionManager = SessionManager(db)
     private val protocolHistoryStore = ProtocolHistoryStore(application)
@@ -126,6 +128,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun connectHlpatch() = viewModelScope.launch {
         hlpatchState.value = HlpatchClient.ConnectionState.CONNECTING
         hlpatchClient.health()
+        hlpatchState.value = hlpatchClient.state
+    }
+
+    fun discoverHlpatchCapabilities() = viewModelScope.launch {
+        hlpatchCapabilities.value = HlpatchCapabilityReport(running = true)
+        hlpatchCapabilities.value = hlpatchClient.discoverCapabilities()
         hlpatchState.value = hlpatchClient.state
     }
 
