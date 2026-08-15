@@ -28,208 +28,123 @@ class ProtocolSender(
     private val _logs = MutableStateFlow<List<ProtocolLogEntry>>(emptyList())
     val logs: StateFlow<List<ProtocolLogEntry>> = _logs
 
-    /** 通道1：OkHttp 直发 */
-    suspend fun sendDirect(
-        url: String,
-        request: GameRequest,
-        onProgress: (String) -> Unit = {}
-    ): GameResponse = withContext(Dispatchers.IO) {
-        val start = System.currentTimeMillis()
-        try {
-            onProgress("正在发送（直连）…")
-            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                connectTimeout = 15_000
-                readTimeout = 30_000
-                setRequestProperty("Content-Type", "application/octet-stream")
-                setRequestProperty("User-Agent", "UnityPlayer/2022.3.62f2")
-                doOutput = true
-                request.headers.forEach { (k, v) -> setRequestProperty(k, v) }
-                if (request.sid != null) setRequestProperty("SID", request.sid)
-                if (request.viewerId != null) setRequestProperty("ViewerID", request.viewerId.toString())
-            }
-            conn.outputStream.use { it.write(request.body.toByteArray()) }
-            val code = conn.responseCode
-            val respHeaders = conn.headerFields.entries.filter { it.key != null }
-                .associate { it.key to it.value.first() }
-            val respBody = (if (code in 200..299) conn.inputStream else conn.errorStream)
-                ?.bufferedReader()?.use { it.readText() } ?: ""
-            val protoCode = ProtocolStatusCode.fromCode(code)
-            val resp = GameResponse(
-                statusCode = code, protocolCode = protoCode,
-                headers = respHeaders, body = respBody, bodyDecrypted = null,
-                latencyMs = System.currentTimeMillis() - start,
-                timestamp = System.currentTimeMillis(),
-                success = code in 200..299 && protoCode == ProtocolStatusCode.OK
-            )
-            _logs.value = _logs.value + ProtocolLogEntry(System.currentTimeMillis(), request, resp, null, SendChannel.OKHTTP_DIRECT)
-            onProgress(if (resp.success) "成功 (${resp.latencyMs}ms)" else "失败: ${protoCode.label}")
-            resp
-        } catch (e: Exception) {
-            val resp = GameResponse(0, ProtocolStatusCode.UNKNOWN, emptyMap(), "", null, System.currentTimeMillis() - start, System.currentTimeMillis(), false)
-            _logs.value = _logs.value + ProtocolLogEntry(System.currentTimeMillis(), request, null, e.message, SendChannel.OKHTTP_DIRECT)
-            onProgress("错误: ${e.message}")
-            resp
-        }
-    }
+    suspend fun sendDirect(url: String, request: GameRequest, onProgress: (String) -> Unit = {}): GameResponse =
+        sendHttp(url, request, SendChannel.OKHTTP_DIRECT, null, onProgress)
 
-    /** 通道2：自定义 TLS — 仿 BoringSSL 指纹 */
-    suspend fun sendCustomTls(
-        url: String,
-        request: GameRequest,
-        onProgress: (String) -> Unit = {}
-    ): GameResponse = withContext(Dispatchers.IO) {
-        val start = System.currentTimeMillis()
-        try {
-            onProgress("正在发送（自定义TLS）…")
-            val sslContext = SSLContext.getInstance("TLSv1.2").apply {
-                init(null, arrayOf<TrustManager>(BoringTrustManager()), null)
-            }
-            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                connectTimeout = 15_000
-                readTimeout = 30_000
-                setRequestProperty("Content-Type", "application/octet-stream")
-                setRequestProperty("User-Agent", "UnityPlayer/2022.3.62f2")
-                doOutput = true
-                request.headers.forEach { (k, v) -> setRequestProperty(k, v) }
-                if (request.sid != null) setRequestProperty("SID", request.sid)
-                if (request.viewerId != null) setRequestProperty("ViewerID", request.viewerId.toString())
-            }
-            if (conn is javax.net.ssl.HttpsURLConnection) {
-                conn.sslSocketFactory = createBoringSslSocketFactory()
-                conn.hostnameVerifier = javax.net.ssl.HostnameVerifier { _, _ -> true }
-            }
-            conn.outputStream.use { it.write(request.body.toByteArray()) }
-            val code = conn.responseCode
-            val respHeaders = conn.headerFields.entries.filter { it.key != null }
-                .associate { it.key to it.value.first() }
-            val respBody = (if (code in 200..299) conn.inputStream else conn.errorStream)
-                ?.bufferedReader()?.use { it.readText() } ?: ""
-            val protoCode = ProtocolStatusCode.fromCode(code)
-            val resp = GameResponse(
-                statusCode = code, protocolCode = protoCode,
-                headers = respHeaders, body = respBody, bodyDecrypted = null,
-                latencyMs = System.currentTimeMillis() - start,
-                timestamp = System.currentTimeMillis(),
-                success = code in 200..299 && protoCode == ProtocolStatusCode.OK
-            )
-            _logs.value = _logs.value + ProtocolLogEntry(System.currentTimeMillis(), request, resp, null, SendChannel.OKHTTP_CUSTOM_TLS)
-            onProgress(if (resp.success) "成功 (${resp.latencyMs}ms)" else "失败: ${protoCode.label}")
-            resp
-        } catch (e: Exception) {
-            val resp = GameResponse(0, ProtocolStatusCode.UNKNOWN, emptyMap(), "", null, System.currentTimeMillis() - start, System.currentTimeMillis(), false)
-            _logs.value = _logs.value + ProtocolLogEntry(System.currentTimeMillis(), request, null, e.message, SendChannel.OKHTTP_CUSTOM_TLS)
-            onProgress("错误: ${e.message}")
-            resp
-        }
-    }
+    suspend fun sendCustomTls(url: String, request: GameRequest, onProgress: (String) -> Unit = {}): GameResponse =
+        sendHttp(url, request, SendChannel.OKHTTP_CUSTOM_TLS, createBoringSslSocketFactory(), onProgress)
 
-    /** 通道3：hlpatch 转发 — 游戏原生 TLS 栈 */
-    suspend fun sendViaHlpatch(
-        request: GameRequest,
-        onProgress: (String) -> Unit = {}
-    ): GameResponse = withContext(Dispatchers.IO) {
-        val start = System.currentTimeMillis()
-        try {
-            onProgress("正在发送（hlpatch转发）…")
-            // 构造转发请求给 hlpatch 的 /api/proxy 端点
-            val proxyBody = buildString {
-                append("{\"endpoint\":\"${request.endpoint.path}\"")
-                request.sid?.let { append(",\"sid\":\"$it\"") }
-                request.viewerId?.let { append(",\"viewer_id\":$it") }
-                append(",\"body\":\"${request.body}\"")
-                append("}")
-            }
-            val result = hlpatchClient.post("/api/proxy", proxyBody)
-            val resp = if (result.ok) {
-                GameResponse(
-                    statusCode = result.statusCode,
-                    protocolCode = ProtocolStatusCode.OK,
-                    headers = emptyMap(),
-                    body = result.body,
-                    bodyDecrypted = result.body,
-                    latencyMs = System.currentTimeMillis() - start,
-                    timestamp = System.currentTimeMillis(),
-                    success = true
-                )
-            } else {
-                GameResponse(
-                    statusCode = result.statusCode,
-                    protocolCode = ProtocolStatusCode.UNKNOWN,
-                    headers = emptyMap(),
-                    body = result.body,
-                    bodyDecrypted = null,
-                    latencyMs = System.currentTimeMillis() - start,
-                    timestamp = System.currentTimeMillis(),
-                    success = false
-                )
-            }
-            _logs.value = _logs.value + ProtocolLogEntry(System.currentTimeMillis(), request, resp, if (!result.ok) result.error else null, SendChannel.HLPATCH_PROXY)
-            onProgress(if (resp.success) "成功 (${resp.latencyMs}ms)" else "失败: ${result.error ?: result.statusCode}")
-            resp
-        } catch (e: Exception) {
-            val resp = GameResponse(0, ProtocolStatusCode.UNKNOWN, emptyMap(), "", null, System.currentTimeMillis() - start, System.currentTimeMillis(), false)
-            _logs.value = _logs.value + ProtocolLogEntry(System.currentTimeMillis(), request, null, e.message, SendChannel.HLPATCH_PROXY)
-            onProgress("错误: ${e.message}")
-            resp
-        }
-    }
-
-    /** 统一发送接口：按通道分发 */
-    suspend fun send(
+    private suspend fun sendHttp(
         url: String,
         request: GameRequest,
         channel: SendChannel,
-        onProgress: (String) -> Unit = {}
-    ): GameResponse = when (channel) {
+        sslSocketFactory: SSLSocketFactory?,
+        onProgress: (String) -> Unit
+    ): GameResponse = withContext(Dispatchers.IO) {
+        val start = System.currentTimeMillis()
+        try {
+            onProgress("正在发送…")
+            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = 15_000
+                readTimeout = 30_000
+                setRequestProperty("Content-Type", "application/octet-stream")
+                setRequestProperty("User-Agent", "UnityPlayer/2022.3.62f2")
+                doOutput = true
+                request.headers.forEach { (k, v) -> setRequestProperty(k, v) }
+                request.sid?.let { setRequestProperty("SID", it) }
+                request.viewerId?.let { setRequestProperty("ViewerID", it.toString()) }
+            }
+            if (sslSocketFactory != null && conn is javax.net.ssl.HttpsURLConnection) {
+                conn.sslSocketFactory = sslSocketFactory
+                conn.hostnameVerifier = javax.net.ssl.HostnameVerifier { _, _ -> true }
+            }
+            conn.outputStream.use { it.write(request.body.toByteArray(Charsets.UTF_8)) }
+            val code = conn.responseCode
+            val respHeaders = conn.headerFields.entries.filter { it.key != null }
+                .associate { it.key to it.value.joinToString(",") }
+            val respBody = (if (code in 200..299) conn.inputStream else conn.errorStream)
+                ?.bufferedReader()?.use { it.readText() } ?: ""
+            val interpreted = ProtocolResponseInterpreter.interpret(code, respBody)
+            val resp = GameResponse(
+                statusCode = code,
+                protocolCode = ProtocolStatusCode.fromCode(interpreted.protocolCode),
+                headers = respHeaders,
+                body = respBody,
+                bodyDecrypted = null,
+                latencyMs = System.currentTimeMillis() - start,
+                timestamp = System.currentTimeMillis(),
+                success = code in 200..299 && interpreted.protocolCode == 200
+            )
+            record(ProtocolLogEntry(System.currentTimeMillis(), request, resp, null, channel))
+            onProgress(if (resp.success) "成功 (${resp.latencyMs}ms)" else "失败: ${interpreted.diagnosis.title}")
+            resp
+        } catch (e: Exception) {
+            val resp = GameResponse(0, ProtocolStatusCode.UNKNOWN, emptyMap(), "", null, System.currentTimeMillis() - start, System.currentTimeMillis(), false)
+            record(ProtocolLogEntry(System.currentTimeMillis(), request, null, e.message, channel))
+            onProgress("错误: ${e.message}")
+            resp
+        }
+    }
+
+    suspend fun sendViaHlpatch(request: GameRequest, onProgress: (String) -> Unit = {}): GameResponse = withContext(Dispatchers.IO) {
+        val start = System.currentTimeMillis()
+        try {
+            onProgress("正在发送（hlpatch转发）…")
+            val result = hlpatchClient.post("/api/proxy", HlpatchProxyEnvelopeCodec.encodeRequest(request))
+            val envelope = if (result.ok) runCatching { HlpatchProxyEnvelopeCodec.decodeResponse(result.body) }.getOrNull() else null
+            val resp = when {
+                envelope != null -> envelope.toGameResponse(System.currentTimeMillis())
+                result.ok -> {
+                    val interpreted = ProtocolResponseInterpreter.interpret(result.statusCode, result.body)
+                    GameResponse(result.statusCode, ProtocolStatusCode.fromCode(interpreted.protocolCode), emptyMap(), result.body, result.body, System.currentTimeMillis() - start, System.currentTimeMillis(), interpreted.protocolCode == 200)
+                }
+                else -> GameResponse(result.statusCode, ProtocolStatusCode.UNKNOWN, emptyMap(), result.body, null, System.currentTimeMillis() - start, System.currentTimeMillis(), false)
+            }
+            val error = envelope?.error ?: if (!result.ok) result.error else null
+            record(ProtocolLogEntry(System.currentTimeMillis(), request, resp, error, SendChannel.HLPATCH_PROXY))
+            onProgress(if (resp.success) "成功 (${resp.latencyMs}ms)" else "失败: ${error ?: resp.protocolCode.label}")
+            resp
+        } catch (e: Exception) {
+            val resp = GameResponse(0, ProtocolStatusCode.UNKNOWN, emptyMap(), "", null, System.currentTimeMillis() - start, System.currentTimeMillis(), false)
+            record(ProtocolLogEntry(System.currentTimeMillis(), request, null, e.message, SendChannel.HLPATCH_PROXY))
+            onProgress("错误: ${e.message}")
+            resp
+        }
+    }
+
+    suspend fun send(url: String, request: GameRequest, channel: SendChannel, onProgress: (String) -> Unit = {}): GameResponse = when (channel) {
         SendChannel.OKHTTP_DIRECT -> sendDirect(url, request, onProgress)
         SendChannel.OKHTTP_CUSTOM_TLS -> sendCustomTls(url, request, onProgress)
         SendChannel.HLPATCH_PROXY -> sendViaHlpatch(request, onProgress)
     }
 
+    private fun record(entry: ProtocolLogEntry) { _logs.value = _logs.value + entry }
+
     private fun createBoringSslSocketFactory(): SSLSocketFactory {
-        val sslContext = SSLContext.getInstance("TLSv1.2").apply {
-            init(null, arrayOf<TrustManager>(BoringTrustManager()), null)
-        }
-        // 覆盖默认 Cipher Suites 顺序以仿 BoringSSL
+        val sslContext = SSLContext.getInstance("TLSv1.2").apply { init(null, arrayOf<TrustManager>(BoringTrustManager()), null) }
         return object : SSLSocketFactory() {
             private val delegate = sslContext.socketFactory
             override fun getDefaultCipherSuites() = BORING_CIPHER_SUITES
             override fun getSupportedCipherSuites() = BORING_CIPHER_SUITES
-            override fun createSocket(s: java.net.Socket, host: String, port: Int, autoClose: Boolean) =
-                (delegate.createSocket(s, host, port, autoClose) as javax.net.ssl.SSLSocket).apply {
-                    enabledCipherSuites = BORING_CIPHER_SUITES
-                    enabledProtocols = arrayOf("TLSv1.2", "TLSv1.3")
-                }
-            override fun createSocket(host: String, port: Int) =
-                (delegate.createSocket(host, port) as javax.net.ssl.SSLSocket).apply { enabledCipherSuites = BORING_CIPHER_SUITES }
-            override fun createSocket(host: String, port: Int, localHost: java.net.InetAddress, localPort: Int) =
-                (delegate.createSocket(host, port, localHost, localPort) as javax.net.ssl.SSLSocket).apply { enabledCipherSuites = BORING_CIPHER_SUITES }
-            override fun createSocket(host: java.net.InetAddress, port: Int) =
-                (delegate.createSocket(host, port) as javax.net.ssl.SSLSocket).apply { enabledCipherSuites = BORING_CIPHER_SUITES }
-            override fun createSocket(address: java.net.InetAddress, port: Int, localAddress: java.net.InetAddress, localPort: Int) =
-                (delegate.createSocket(address, port, localAddress, localPort) as javax.net.ssl.SSLSocket).apply { enabledCipherSuites = BORING_CIPHER_SUITES }
+            override fun createSocket(s: java.net.Socket, host: String, port: Int, autoClose: Boolean) = (delegate.createSocket(s, host, port, autoClose) as javax.net.ssl.SSLSocket).apply { enabledCipherSuites = BORING_CIPHER_SUITES; enabledProtocols = arrayOf("TLSv1.2", "TLSv1.3") }
+            override fun createSocket(host: String, port: Int) = (delegate.createSocket(host, port) as javax.net.ssl.SSLSocket).apply { enabledCipherSuites = BORING_CIPHER_SUITES }
+            override fun createSocket(host: String, port: Int, localHost: java.net.InetAddress, localPort: Int) = (delegate.createSocket(host, port, localHost, localPort) as javax.net.ssl.SSLSocket).apply { enabledCipherSuites = BORING_CIPHER_SUITES }
+            override fun createSocket(host: java.net.InetAddress, port: Int) = (delegate.createSocket(host, port) as javax.net.ssl.SSLSocket).apply { enabledCipherSuites = BORING_CIPHER_SUITES }
+            override fun createSocket(address: java.net.InetAddress, port: Int, localAddress: java.net.InetAddress, localPort: Int) = (delegate.createSocket(address, port, localAddress, localPort) as javax.net.ssl.SSLSocket).apply { enabledCipherSuites = BORING_CIPHER_SUITES }
         }
     }
 
     companion object {
-        /** BoringSSL 常用 Cipher Suites 顺序 */
         val BORING_CIPHER_SUITES = arrayOf(
-            "TLS_AES_128_GCM_SHA256",
-            "TLS_AES_256_GCM_SHA384",
-            "TLS_CHACHA20_POLY1305_SHA256",
-            "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
-            "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
-            "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
-            "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
-            "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256",
-            "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256"
+            "TLS_AES_128_GCM_SHA256", "TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256",
+            "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256", "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
+            "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256", "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+            "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256", "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256"
         )
     }
 }
 
-/** 信任所有证书（用于抓包调试，不用于生产） */
 private class BoringTrustManager : X509TrustManager {
     override fun checkClientTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {}
     override fun checkServerTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {}
