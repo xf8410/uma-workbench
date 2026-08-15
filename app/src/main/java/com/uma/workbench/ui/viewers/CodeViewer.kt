@@ -87,7 +87,7 @@ private fun highlightJson(text: String): AnnotatedString = buildAnnotatedString 
                 while (i < text.length && text[i] in '0'..'9' || text[i] in ".-+eE") i++
                 withStyle(SpanStyle(color = c.syntaxNumber)) { append(text.substring(start, i)) }
             }
-            ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' -> { append(ch); i++ }
+            ' ', '\t', '\n', '\r' -> { append(ch); i++ }
             else -> {
                 val start = i
                 while (i < text.length && text[i] !in "\"{},[]: \t\n\r") i++
