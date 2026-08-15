@@ -38,11 +38,11 @@ class ProtocolSender(
         try {
             onProgress("正在发送（直连）…")
             val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-                method = "POST"
+                requestMethod = "POST"
                 connectTimeout = 15_000
                 readTimeout = 30_000
-                requestProperties["Content-Type"] = "application/octet-stream"
-                requestProperties["User-Agent"] = "UnityPlayer/2022.3.62f2"
+                setRequestProperty("Content-Type", "application/octet-stream")
+                setRequestProperty("User-Agent", "UnityPlayer/2022.3.62f2")
                 doOutput = true
                 request.headers.forEach { (k, v) -> setRequestProperty(k, v) }
                 if (request.sid != null) setRequestProperty("SID", request.sid)
@@ -86,11 +86,11 @@ class ProtocolSender(
                 init(null, arrayOf<TrustManager>(BoringTrustManager()), null)
             }
             val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-                method = "POST"
+                requestMethod = "POST"
                 connectTimeout = 15_000
                 readTimeout = 30_000
-                requestProperties["Content-Type"] = "application/octet-stream"
-                requestProperties["User-Agent"] = "UnityPlayer/2022.3.62f2"
+                setRequestProperty("Content-Type", "application/octet-stream")
+                setRequestProperty("User-Agent", "UnityPlayer/2022.3.62f2")
                 doOutput = true
                 request.headers.forEach { (k, v) -> setRequestProperty(k, v) }
                 if (request.sid != null) setRequestProperty("SID", request.sid)
