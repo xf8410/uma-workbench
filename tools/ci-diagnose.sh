@@ -21,6 +21,24 @@ gradle --no-daemon --stacktrace --info --warning-mode all :app:compileDebugKotli
 status=${PIPESTATUS[0]}
 set -e
 
+if (( status != 0 )); then
+  log 'compiler diagnostics annotations'
+  # Surface complete compiler diagnostic lines in GitHub annotations so failures remain
+  # diagnosable even when raw Actions logs or artifact downloads are unavailable.
+  grep -E '(^|[[:space:]])(e: |error: |Caused by:)' build/ci-diagnostics/compileDebugKotlin.log \
+    > build/ci-diagnostics/compiler-errors.txt || true
+  if [[ ! -s build/ci-diagnostics/compiler-errors.txt ]]; then
+    tail -n 200 build/ci-diagnostics/compileDebugKotlin.log \
+      > build/ci-diagnostics/compiler-errors.txt
+  fi
+  while IFS= read -r diagnostic; do
+    escaped=${diagnostic//'%'/'%25'}
+    escaped=${escaped//$'\r'/'%0D'}
+    escaped=${escaped//$'\n'/'%0A'}
+    printf '::error title=Kotlin compiler diagnostic::%s\n' "$escaped"
+  done < build/ci-diagnostics/compiler-errors.txt
+fi
+
 log 'generated reports'
 find app/build -maxdepth 5 -type f \( -name '*.xml' -o -name '*.html' -o -name '*.txt' \) -print 2>/dev/null | sort > build/ci-diagnostics/generated-reports.txt || true
 exit "$status"
