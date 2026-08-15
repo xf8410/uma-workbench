@@ -42,11 +42,11 @@ class ProtocolHistoryTransfer(
         }
     }
 
-    suspend fun import(uri: Uri): ProtocolArchiveImportResult = withContext(Dispatchers.IO) {
+    suspend fun importRecords(uri: Uri): ProtocolArchiveImportResult = withContext(Dispatchers.IO) {
         val input = resolver.openInputStream(uri) ?: error("无法打开导入文档：$uri")
         input.use { stream ->
             InputStreamReader(stream, Charsets.UTF_8).use { reader ->
-                ProtocolHistoryArchive.import(reader) { record ->
+                ProtocolHistoryArchive.importRecords(reader) { record ->
                     kotlinx.coroutines.runBlocking { append(record) }
                 }
             }
