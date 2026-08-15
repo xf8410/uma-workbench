@@ -28,7 +28,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val workspaces = workspaceManager.observeWorkspaces().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     private val _currentWorkspaceId = MutableStateFlow<String?>(null)
-    val currentWorkspace: StateFlow<WorkspaceEntity?> = _currentWorkspaceId.flatMapLatest { id -> if (id == null) flowOf(null) else flow { emit(db.workspaces().get(id)) } }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    val currentWorkspace: StateFlow<WorkspaceEntity?> = _currentWorkspaceId.flatMapLatest { id -> if (id == null) flowOf<WorkspaceEntity?>(null) else flow<WorkspaceEntity?> { emit(db.workspaces().get(id)) } }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
     val projects = _currentWorkspaceId.flatMapLatest { id -> if (id == null) flowOf(emptyList()) else workspaceManager.observeProjects(id) }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val recentFiles = _currentWorkspaceId.flatMapLatest { id -> if (id == null) flowOf(emptyList()) else workspaceManager.observeRecentFiles(id) }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val openTabs = _currentWorkspaceId.flatMapLatest { id -> if (id == null) flowOf(emptyList()) else db.openTabs().observe(id) }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
