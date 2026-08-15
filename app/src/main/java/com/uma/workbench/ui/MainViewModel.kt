@@ -103,7 +103,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val sid = extractJsonField(status.body, "sid") ?: extractJsonField(status.body, "SID")
         val vid = extractJsonField(status.body, "viewer_id") ?: extractJsonField(status.body, "viewerId")
         if (sid != null) {
-            val headers = buildMap { put("APP-VER", extractJsonField(status.body, "app_ver") ?: "2.29.0"); extractJsonField(status.body, "res_ver")?.let { put("RES-VER", it) }; extractJsonField(status.body, "device_id")?.let { put("Device-Id", it) } }
+            val headers = buildMap<String, String> { put("APP-VER", extractJsonField(status.body, "app_ver") ?: "2.29.0"); extractJsonField(status.body, "res_ver")?.let { put("RES-VER", it) }; extractJsonField(status.body, "device_id")?.let { put("Device-Id", it) } }
             sessionManager.importFromHlpatch(sid, vid?.toLongOrNull() ?: 0L, headers); dumpState.value = "已 dump SID: $sid"
         } else dumpState.value = "未找到 SID"
     }
