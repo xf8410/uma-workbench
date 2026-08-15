@@ -32,11 +32,29 @@ class WorkbenchRepository(private val database: AppDatabase) {
         database.conversations().touch(conversationId, now); requestId
     }
 
-    suspend fun queueImportedSource(name: String, uri: String, kind: SourceKind, sha256: String): QueuedImport = database.withTransaction {
+    suspend fun queueImportedSource(
+        name: String,
+        uri: String,
+        kind: SourceKind,
+        sha256: String,
+        workspaceId: String? = null,
+        fileSize: Long? = null
+    ): QueuedImport = database.withTransaction {
         val sourceId = UUID.randomUUID().toString(); val workItemId = UUID.randomUUID().toString()
         val duplicate = database.auditSources().findBySha256(sha256)
-        database.auditSources().upsert(AuditSourceEntity(sourceId, uri, kind.name, name, sha256 = sha256, duplicateOf = duplicate?.id))
-        database.workItems().upsert(WorkItemEntity(workItemId, if (duplicate == null) "SOURCE_ANALYSIS" else "DUPLICATE_REVIEW", sourceId = sourceId, stage = if (duplicate == null) "DISCOVERY" else "FINGERPRINT", updatedAt = System.currentTimeMillis()))
+        database.auditSources().upsert(
+            AuditSourceEntity(sourceId, uri, kind.name, name, sha256 = sha256, duplicateOf = duplicate?.id, workspaceId = workspaceId, fileSize = fileSize)
+        )
+        database.workItems().upsert(
+            WorkItemEntity(
+                workItemId,
+                if (duplicate == null) "SOURCE_ANALYSIS" else "DUPLICATE_REVIEW",
+                sourceId = sourceId,
+                stage = if (duplicate == null) "DISCOVERY" else "FINGERPRINT",
+                updatedAt = System.currentTimeMillis(),
+                workspaceId = workspaceId
+            )
+        )
         QueuedImport(sourceId, workItemId, duplicate != null)
     }
 }
