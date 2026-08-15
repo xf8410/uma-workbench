@@ -32,6 +32,7 @@ import com.uma.workbench.hlpatch.HlpatchClient
 import com.uma.workbench.network.NetworkState
 import com.uma.workbench.protocol.GameEndpoint
 import com.uma.workbench.protocol.ProtocolEditorDefaultsFactory
+import com.uma.workbench.ui.HlpatchCapabilityPanel
 import com.uma.workbench.ui.MainViewModel
 import com.uma.workbench.ui.ProtocolHistoryPanel
 import com.uma.workbench.ui.SidHealthPanel
@@ -77,12 +78,13 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class) @Composable private fun ProtocolPanel(vm: MainViewModel) {
     var selectedEndpoint by remember { mutableStateOf(GameEndpoint.LOGIN.path) }; var sidInput by remember { mutableStateOf("") }; var viewerIdInput by remember { mutableStateOf("") }; var bodyInput by remember { mutableStateOf("") }; var selectedChannel by remember { mutableIntStateOf(2) }; var endpointMenu by remember { mutableStateOf(false) }
-    val activeSession by vm.activeSession.collectAsStateWithLifecycle(); val logs by vm.protocolLogs.collectAsStateWithLifecycle(); val dumpState by vm.dumpState.collectAsStateWithLifecycle(); val healthState by vm.sidHealthState.collectAsStateWithLifecycle(); val clipboard = LocalClipboardManager.current
+    val activeSession by vm.activeSession.collectAsStateWithLifecycle(); val logs by vm.protocolLogs.collectAsStateWithLifecycle(); val dumpState by vm.dumpState.collectAsStateWithLifecycle(); val healthState by vm.sidHealthState.collectAsStateWithLifecycle(); val capabilities by vm.hlpatchCapabilities.collectAsStateWithLifecycle(); val clipboard = LocalClipboardManager.current
     LaunchedEffect(selectedEndpoint, activeSession) { val defaults = ProtocolEditorDefaultsFactory.create(selectedEndpoint, activeSession, sidInput, viewerIdInput); sidInput = defaults.sid; viewerIdInput = defaults.viewerId; bodyInput = defaults.body }
     Column(Modifier.fillMaxWidth().height(430.dp).background(WorkbenchColors.bg).padding(8.dp)) {
         if (activeSession != null) { Text("活动 SID（完整）", color = WorkbenchColors.accent, style = MaterialTheme.typography.labelSmall); Row(verticalAlignment = Alignment.CenterVertically) { Text(activeSession!!.sid, color = WorkbenchColors.textPrimary, fontFamily = FontFamily.Monospace, modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState())); TextButton(onClick = { clipboard.setText(AnnotatedString(activeSession!!.sid)) }) { Text("复制完整 SID") } } }
         Row(verticalAlignment = Alignment.CenterVertically) { OutlinedTextField(sidInput, { sidInput = it }, label = { Text("SID（完整）") }, singleLine = true, modifier = Modifier.weight(1f)); OutlinedTextField(viewerIdInput, { viewerIdInput = it }, label = { Text("viewer_id") }, singleLine = true, modifier = Modifier.width(140.dp)); Button(onClick = { vm.dumpSid() }) { Text("Dump") } }
         if (dumpState.isNotBlank()) Text(dumpState, color = WorkbenchColors.textMuted, style = MaterialTheme.typography.labelSmall)
+        HlpatchCapabilityPanel(capabilities) { vm.discoverHlpatchCapabilities() }
         SidHealthPanel(healthState) { vm.checkSidHealth(sidInput, viewerIdInput.toLongOrNull()) }
         Row(verticalAlignment = Alignment.CenterVertically) { ExposedDropdownMenuBox(endpointMenu, { endpointMenu = it }) { OutlinedTextField(selectedEndpoint, {}, readOnly = true, label = { Text("端点") }, modifier = Modifier.menuAnchor().width(190.dp)); ExposedDropdownMenu(endpointMenu, { endpointMenu = false }) { GameEndpoint.entries.forEach { endpoint -> DropdownMenuItem({ Text(endpoint.path) }, { selectedEndpoint = endpoint.path; endpointMenu = false }) } } }; Spacer(Modifier.width(8.dp)); listOf("直发", "自定义TLS", "hlpatch转发").forEachIndexed { index, label -> Text(label, color = if (selectedChannel == index) WorkbenchColors.accent else WorkbenchColors.textMuted, modifier = Modifier.clickable { selectedChannel = index }.padding(6.dp)) }; Spacer(Modifier.weight(1f)); Button(onClick = { vm.sendProtocolRequest(selectedEndpoint, sidInput, viewerIdInput.toLongOrNull(), bodyInput, selectedChannel) }) { Text("发送") } }
         OutlinedTextField(bodyInput, { bodyInput = it }, label = { Text("可编辑请求体模板") }, modifier = Modifier.fillMaxWidth().weight(1f), textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)); Text(if (logs.isEmpty()) "暂无协议日志" else logs.last().let { "${it.request.endpoint.path}: ${it.response?.protocolCode?.label ?: it.error ?: "无响应"}" }, color = WorkbenchColors.textMuted, style = MaterialTheme.typography.labelSmall, maxLines = 2, overflow = TextOverflow.Clip)
