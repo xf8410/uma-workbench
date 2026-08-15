@@ -39,7 +39,7 @@ class HlpatchClient(private val db: AppDatabase, private val baseUrl: String = "
         return if (r1.ok && r2.ok && r3.ok) HlpatchResult.ok("hooks installed") else HlpatchResult.error("hook install failed")
     }
 
-    private suspend fun get(path: String): HlpatchResult = request("GET", path, null)
+    suspend fun get(path: String): HlpatchResult = request("GET", path, null)
     suspend fun post(path: String, body: String): HlpatchResult = request("POST", path, body)
 
     private suspend fun request(method: String, path: String, body: String?): HlpatchResult = withContext(Dispatchers.IO) {

@@ -48,7 +48,7 @@ object PacketCrypto {
     fun decrypt(ciphertext: ByteArray): String {
         val cfg = config
         if (cfg.mode == CryptoMode.NONE) return String(ciphertext, Charsets.UTF_8)
-        val payload = if (cfg.prefix != null && ciphertext.size > cfg.prefix.size && ciphertext.startsWith(cfg.prefix)) {
+        val payload = if (cfg.prefix != null && ciphertext.size > cfg.prefix.size && ciphertext.copyOfRange(0, cfg.prefix.size).contentEquals(cfg.prefix)) {
             ciphertext.copyOfRange(cfg.prefix.size, ciphertext.size)
         } else ciphertext
         val decrypted = when (cfg.mode) {

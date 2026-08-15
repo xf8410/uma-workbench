@@ -486,7 +486,7 @@ private fun ProtocolPanel(vm: MainViewModel) {
     var viewerIdInput by remember { mutableStateOf("") }
     var bodyInput by remember { mutableStateOf("") }
     var selectedChannel by remember { mutableStateOf(0) }
-    val scope = androidx.lifecycle.viewModelScope
+    
     val protoLogs by vm.protocolLogs.collectAsStateWithLifecycle()
     val activeSession by vm.activeSession.collectAsStateWithLifecycle()
     val dumpState by vm.dumpState.collectAsStateWithLifecycle()

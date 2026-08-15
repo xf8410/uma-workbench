@@ -77,7 +77,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val sidDumper = SidDumper(db, hlpatchClient, sessionManager)
 
     val activeSession = sessionManager.activeSession
-    val protocolLogs: MutableStateFlow<List<ProtocolLogEntry>> = protocolSender.logs
+    val protocolLogs: StateFlow<List<ProtocolLogEntry>> = protocolSender.logs
     val dumpState: MutableStateFlow<String> = MutableStateFlow("")
 
     // ── 工作区操作 ──
@@ -167,11 +167,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val sid = extractJsonField(status.body, "sid") ?: extractJsonField(status.body, "SID")
         val vid = extractJsonField(status.body, "viewer_id") ?: extractJsonField(status.body, "viewerId")
         if (sid != null) {
-            sessionManager.importFromHlpatch(sid, vid?.toLongOrNull() ?: 0L, mapOf(
-                "APP-VER" to (extractJsonField(status.body, "app_ver") ?: "2.29.0"),
-                "RES-VER" to extractJsonField(status.body, "res_ver"),
-                "Device-Id" to extractJsonField(status.body, "device_id")
-            ))
+            val headers = buildMap<String, String> {
+                put("APP-VER", extractJsonField(status.body, "app_ver") ?: "2.29.0")
+                extractJsonField(status.body, "res_ver")?.let { put("RES-VER", it) }
+                extractJsonField(status.body, "device_id")?.let { put("Device-Id", it) }
+            }
+            sessionManager.importFromHlpatch(sid, vid?.toLongOrNull() ?: 0L, headers)
             dumpState.value = "已 dump SID: ${sid.take(8)}…"
         } else {
             dumpState.value = "未找到 SID"
@@ -194,7 +195,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val resp = when (ch) {
                 com.uma.workbench.protocol.SendChannel.OKHTTP_DIRECT -> protocolSender.sendDirect(url, req)
                 com.uma.workbench.protocol.SendChannel.OKHTTP_CUSTOM_TLS -> protocolSender.sendCustomTls(url, req)
-                com.uma.workbench.protocol.SendChannel.HLPATCH_PROXY -> protocolSender.sendViaHlpatch(url, req)
+                com.uma.workbench.protocol.SendChannel.HLPATCH_PROXY -> protocolSender.sendViaHlpatch(req)
             }
         }.onFailure { /* 日志已记录 */ }
     }
