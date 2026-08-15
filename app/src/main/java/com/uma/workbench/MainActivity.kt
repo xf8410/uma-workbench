@@ -35,7 +35,6 @@ import com.uma.workbench.protocol.ProtocolEditorDefaultsFactory
 import com.uma.workbench.ui.*
 import com.uma.workbench.ui.theme.WorkbenchColors
 import com.uma.workbench.ui.theme.WorkbenchTheme
-import com.uma.workbench.ui.viewers.CodeViewer
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); setContent { WorkbenchTheme { WorkbenchApp() } } }
@@ -60,13 +59,26 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable private fun TraeLayout(vm: MainViewModel, ws: WorkspaceEntity, networkState: NetworkState, hlpatchState: HlpatchClient.ConnectionState) {
-    var activeBottomTab by remember { mutableIntStateOf(0) }; val projects by vm.projects.collectAsStateWithLifecycle(); val recentFiles by vm.recentFiles.collectAsStateWithLifecycle(); val openTabs by vm.openTabs.collectAsStateWithLifecycle(); val activeTabId by vm.activeTabId.collectAsStateWithLifecycle(); val fileContent by vm.fileContent.collectAsStateWithLifecycle(); val importRows by vm.importRows.collectAsStateWithLifecycle(); val importMessage by vm.importMessage.collectAsStateWithLifecycle()
+    var activeBottomTab by remember { mutableIntStateOf(0) }
+    val projects by vm.projects.collectAsStateWithLifecycle(); val recentFiles by vm.recentFiles.collectAsStateWithLifecycle(); val openTabs by vm.openTabs.collectAsStateWithLifecycle(); val activeTabId by vm.activeTabId.collectAsStateWithLifecycle(); val importRows by vm.importRows.collectAsStateWithLifecycle(); val importMessage by vm.importMessage.collectAsStateWithLifecycle()
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> if (uris.isNotEmpty()) vm.importAndIndex(uris) }
     Surface(Modifier.fillMaxSize(), color = WorkbenchColors.bg) { Column {
         Row(Modifier.fillMaxWidth().height(36.dp).background(WorkbenchColors.bgSecondary).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) { IconButton({ vm.closeWorkspace() }, Modifier.size(28.dp)) { Icon(Icons.Default.Home, null, tint = WorkbenchColors.textSecondary) }; Text(ws.name, color = WorkbenchColors.textPrimary); Spacer(Modifier.weight(1f)); Text("hlpatch:${hlpatchState.name} · ${networkState.name}", color = WorkbenchColors.textMuted, style = MaterialTheme.typography.labelSmall) }
         Row(Modifier.weight(1f)) {
-            Column(Modifier.width(220.dp).fillMaxHeight().background(WorkbenchColors.bgSecondary).padding(8.dp)) { Text("项目", color = WorkbenchColors.textSecondary); projects.forEach { Text(it.name, color = WorkbenchColors.textPrimary, modifier = Modifier.padding(4.dp)) }; Text("最近文件", color = WorkbenchColors.textSecondary, modifier = Modifier.padding(top = 8.dp)); recentFiles.forEach { f -> Text(f.name, color = WorkbenchColors.textPrimary, modifier = Modifier.clickable { vm.openFile(f.uri, f.name) }.padding(4.dp)) }; Spacer(Modifier.weight(1f)); TextButton(onClick = { importLauncher.launch(arrayOf("application/vnd.android.package-archive", "application/zip", "application/x-tar", "application/octet-stream", "application/json", "text/plain", "*/*")) }) { Icon(Icons.Default.FileOpen, null); Text("导入并索引") } }
-            Column(Modifier.weight(1f)) { if (openTabs.isNotEmpty()) Row(Modifier.fillMaxWidth().height(32.dp).horizontalScroll(rememberScrollState())) { openTabs.forEach { tab -> Text(tab.title, color = if (tab.id == activeTabId) WorkbenchColors.accent else WorkbenchColors.textSecondary, modifier = Modifier.clickable { vm.selectTab(tab.id) }.padding(8.dp)) } }; Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { if (fileContent == null) Text("打开文件开始工作", color = WorkbenchColors.textMuted) else CodeViewer(fileContent!!, "text") }; when (activeBottomTab) { 1 -> ProtocolHistoryPanel(vm); 2 -> ProtocolPanel(vm); 3 -> Column(Modifier.height(430.dp)) { if (importMessage.isNotBlank()) Text(importMessage, color = WorkbenchColors.textMuted, modifier = Modifier.padding(8.dp)); LazyColumn { item { ImportIndexPanel(importRows, vm::retryImport) } } } } }
+            Column(Modifier.width(220.dp).fillMaxHeight().background(WorkbenchColors.bgSecondary).padding(8.dp)) {
+                Text("项目", color = WorkbenchColors.textSecondary); projects.forEach { Text(it.name, color = WorkbenchColors.textPrimary, modifier = Modifier.padding(4.dp)) }
+                Text("最近文件", color = WorkbenchColors.textSecondary, modifier = Modifier.padding(top = 8.dp)); recentFiles.forEach { file -> Text(file.name, color = WorkbenchColors.textPrimary, modifier = Modifier.clickable { vm.openFile(file.uri, file.name) }.padding(4.dp)) }
+                Spacer(Modifier.weight(1f)); TextButton(onClick = { importLauncher.launch(arrayOf("application/vnd.android.package-archive", "application/zip", "application/x-tar", "application/octet-stream", "application/json", "text/plain", "*/*")) }) { Icon(Icons.Default.FileOpen, null); Text("导入并索引") }
+            }
+            Column(Modifier.weight(1f)) {
+                if (openTabs.isNotEmpty()) Row(Modifier.fillMaxWidth().height(32.dp).horizontalScroll(rememberScrollState())) { openTabs.forEach { tab -> Text(tab.title, color = if (tab.id == activeTabId) WorkbenchColors.accent else WorkbenchColors.textSecondary, modifier = Modifier.clickable { vm.selectTab(tab.id) }.padding(8.dp)) } }
+                Box(Modifier.weight(1f).fillMaxWidth()) { ActiveDocumentPane(openTabs, activeTabId) }
+                when (activeBottomTab) {
+                    1 -> ProtocolHistoryPanel(vm)
+                    2 -> ProtocolPanel(vm)
+                    3 -> Column(Modifier.height(430.dp)) { if (importMessage.isNotBlank()) Text(importMessage, color = WorkbenchColors.textMuted, modifier = Modifier.padding(8.dp)); LazyColumn { item { ImportIndexPanel(importRows, vm::retryImport) } } }
+                }
+            }
         }
         Row(Modifier.fillMaxWidth().height(28.dp).background(WorkbenchColors.bgSecondary), verticalAlignment = Alignment.CenterVertically) { listOf("代码", "历史", "协议", "导入索引").forEachIndexed { index, label -> Text(label, color = if (index == activeBottomTab) WorkbenchColors.accent else WorkbenchColors.textMuted, modifier = Modifier.clickable { activeBottomTab = index }.padding(horizontal = 10.dp)) } }
     } }
