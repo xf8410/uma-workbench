@@ -101,6 +101,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun selectTab(id: String) { _activeTabId.value = id }
     fun closeTab(id: String) = viewModelScope.launch { db.openTabs().delete(id); if (_activeTabId.value == id) _activeTabId.value = openTabs.value.firstOrNull()?.id }
 
+    // 文件导入启动器回调
+    fun importFile(uris: List<Uri> = emptyList()) = viewModelScope.launch {
+        if (uris.isEmpty()) return@launch
+        uris.forEach { uri ->
+            runCatching {
+                val name = uri.lastPathSegment ?: uri.toString().takeLast(30)
+                openFile(uri.toString(), name)
+            }
+        }
+    }
+
     // ── Agent 对话 (241-270) ──
     fun newConversation() = viewModelScope.launch {
         val wsId = _currentWorkspaceId.value
