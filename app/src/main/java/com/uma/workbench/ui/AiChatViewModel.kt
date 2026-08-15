@@ -8,9 +8,11 @@ import com.uma.workbench.agent.*
 import com.uma.workbench.data.ConversationEntity
 import com.uma.workbench.data.MessageEntity
 import java.util.UUID
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class AiChatViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = (application as WorkbenchApplication).repository
     private val catalogStore = AiProviderCatalogStore(application)
@@ -35,8 +37,7 @@ class AiChatViewModel(application: Application) : AndroidViewModel(application) 
     fun send(completeText: String) {
         if (completeText.isBlank() || generation.value.canInterrupt) return
         refreshConfiguration()
-        val selection = _catalog.value.defaultModel
-        if (selection == null) return
+        val selection = _catalog.value.defaultModel ?: return
         viewModelScope.launch {
             val conversationId = ensureConversation(completeText)
             val history = messages.value.map { AiPromptMessage(it.role.lowercase(), it.content) } + AiPromptMessage("user", completeText)
