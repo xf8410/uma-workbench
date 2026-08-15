@@ -4,16 +4,14 @@ import android.util.Log
 import com.uma.workbench.data.AppDatabase
 import com.uma.workbench.data.HlpatchSnapshotEntity
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withContext
 import java.net.URLEncoder
 import java.util.UUID
 
 /** HTTP client to hlpatch SO at 127.0.0.1:18765. Features 361-400. */
 class HlpatchClient(private val db: AppDatabase, private val baseUrl: String = "http://127.0.0.1:18765") {
-
     enum class ConnectionState { DISCONNECTED, CONNECTING, READY, DEGRADED, OVERLOADED, INCOMPATIBLE }
-
     var state: ConnectionState = ConnectionState.DISCONNECTED
         private set
 
@@ -22,13 +20,7 @@ class HlpatchClient(private val db: AppDatabase, private val baseUrl: String = "
 
     /** Probes only the real loopback service and retains every complete response and error. */
     suspend fun discoverCapabilities(): HlpatchCapabilityReport {
-        val probes = listOf(
-            "/health" to true,
-            "/summary" to true,
-            "/api/proxy" to false,
-            "/il2cpp/search?q=&limit=1" to false,
-            "/api/md5log" to false
-        )
+        val probes = listOf("/health" to true, "/summary" to true, "/api/proxy" to false, "/il2cpp/search?q=&limit=1" to false, "/api/md5log" to false)
         val observations = probes.map { (path, required) ->
             val result = get(path)
             HlpatchEndpointCapability(path, required, result.ok, result.statusCode, result.body, result.error)
@@ -40,22 +32,17 @@ class HlpatchClient(private val db: AppDatabase, private val baseUrl: String = "
             HlpatchCompatibility.INCOMPATIBLE -> ConnectionState.INCOMPATIBLE
             HlpatchCompatibility.UNREACHABLE, HlpatchCompatibility.NOT_CHECKED -> ConnectionState.DISCONNECTED
         }
-        return HlpatchCapabilityReport(System.currentTimeMillis(), compatibility, observations)
+        return HlpatchCapabilityReport(checkedAt = System.currentTimeMillis(), compatibility = compatibility, endpoints = observations)
     }
 
-    suspend fun il2cppTree(name: String, depth: Int = 2): HlpatchResult =
-        get("/il2cpp/tree?name=${encode(name)}&depth=$depth")
+    suspend fun il2cppTree(name: String, depth: Int = 2): HlpatchResult = get("/il2cpp/tree?name=${encode(name)}&depth=$depth")
+    suspend fun il2cppSearch(query: String, limit: Int = 50): HlpatchResult = get("/il2cpp/search?q=${encode(query)}&limit=$limit")
 
-    suspend fun il2cppSearch(query: String, limit: Int = 50): HlpatchResult =
-        get("/il2cpp/search?q=${encode(query)}&limit=$limit")
-
-    /** Uses the observed class endpoint and preserves the complete response even if its schema is unknown. */
+    /** Uses real local endpoints and preserves complete responses even when their schema is unknown. */
     suspend fun il2cppClasses(query: String): Il2CppExplorerResult =
         il2cppExplorerQuery(Il2CppExplorerOperation.SEARCH_CLASSES, query, "/il2cpp/search?q=${encode(query)}")
-
     suspend fun il2cppFields(className: String): Il2CppExplorerResult =
         il2cppExplorerQuery(Il2CppExplorerOperation.READ_FIELDS, className, "/il2cpp/fields?class=${encode(className)}")
-
     suspend fun il2cppMethods(className: String): Il2CppExplorerResult =
         il2cppExplorerQuery(Il2CppExplorerOperation.READ_METHODS, className, "/il2cpp/methods?class=${encode(className)}")
 
@@ -67,24 +54,18 @@ class HlpatchClient(private val db: AppDatabase, private val baseUrl: String = "
     suspend fun snapshot(): HlpatchResult = get("/debug/ramen_planner_state")
     suspend fun md5Log(): HlpatchResult = get("/api/md5log")
     suspend fun mdbRaw(sql: String): HlpatchResult = get("/mdb/raw?sql=${encode(sql)}")
-
     suspend fun installHooks(): HlpatchResult {
-        val r1 = post("/api/md5log/install", "")
-        val r2 = post("/api/sniff/toggle?enabled=1", "")
-        val r3 = post("/api/md5log/clear", "")
+        val r1 = post("/api/md5log/install", ""); val r2 = post("/api/sniff/toggle?enabled=1", ""); val r3 = post("/api/md5log/clear", "")
         return if (r1.ok && r2.ok && r3.ok) HlpatchResult.ok("hooks installed") else HlpatchResult.error("hook install failed")
     }
 
     suspend fun get(path: String): HlpatchResult = request("GET", path, null)
     suspend fun post(path: String, body: String): HlpatchResult = request("POST", path, body)
-
     private suspend fun request(method: String, path: String, body: String?): HlpatchResult = withContext(Dispatchers.IO) {
         state = ConnectionState.CONNECTING
         try {
             val conn = (java.net.URL(baseUrl + path).openConnection() as java.net.HttpURLConnection).apply {
-                requestMethod = method
-                connectTimeout = 3_000
-                readTimeout = 10_000
+                requestMethod = method; connectTimeout = 3_000; readTimeout = 10_000
                 if (body != null) { doOutput = true; setRequestProperty("Content-Type", "application/json") }
             }
             if (body != null) conn.outputStream.use { it.write(body.toByteArray()) }
@@ -100,7 +81,6 @@ class HlpatchClient(private val db: AppDatabase, private val baseUrl: String = "
             HlpatchResult(false, 0, "", e.stackTraceToString())
         }
     }
-
     fun observeSnapshots(): Flow<List<HlpatchSnapshotEntity>> = db.hlpatchSnapshots().observeRecent()
     private fun encode(value: String): String = URLEncoder.encode(value, "UTF-8")
 }
