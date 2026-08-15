@@ -36,7 +36,7 @@ class ProtocolHistoryTransferTest {
         val completeFirstLine = writer.toString().lineSequence().first()
         val persisted = mutableListOf<ProtocolHistoryRecord>()
 
-        val result = ProtocolHistoryArchive.import(StringReader(writer.toString())) { value ->
+        val result = ProtocolHistoryArchive.importRecords(StringReader(writer.toString())) { value ->
             if (value.id == "duplicate") error("duplicate primary key")
             persisted += value
         }
@@ -71,7 +71,7 @@ class ProtocolHistoryTransferTest {
 
         assertEquals(250L, ProtocolHistoryArchive.export(records, writer))
         val restored = mutableListOf<ProtocolHistoryRecord>()
-        val result = ProtocolHistoryArchive.import(StringReader(writer.toString()), restored::add)
+        val result = ProtocolHistoryArchive.importRecords(StringReader(writer.toString()), restored::add)
         assertEquals(250L, result.importedRecords)
         assertEquals(250, restored.size)
         assertTrue(restored.last().requestBody.endsWith("长".repeat(2_000)))
