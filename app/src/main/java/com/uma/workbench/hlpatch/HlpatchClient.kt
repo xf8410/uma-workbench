@@ -19,6 +19,40 @@ class HlpatchClient(private val db: AppDatabase, private val baseUrl: String = "
     suspend fun health(): HlpatchResult = get("/health")
     suspend fun status(): HlpatchResult = get("/summary")
 
+    /** Probes only the real loopback service and retains every complete response and error. */
+    suspend fun discoverCapabilities(): HlpatchCapabilityReport {
+        val probes = listOf(
+            "/health" to true,
+            "/summary" to true,
+            "/api/proxy" to false,
+            "/il2cpp/search?q=&limit=1" to false,
+            "/api/md5log" to false
+        )
+        val observations = probes.map { (path, required) ->
+            val result = get(path)
+            HlpatchEndpointCapability(
+                path = path,
+                required = required,
+                supported = result.ok,
+                statusCode = result.statusCode,
+                responseBody = result.body,
+                error = result.error
+            )
+        }
+        val compatibility = HlpatchCapabilityClassifier.classify(observations)
+        state = when (compatibility) {
+            HlpatchCompatibility.COMPATIBLE -> ConnectionState.READY
+            HlpatchCompatibility.DEGRADED -> ConnectionState.DEGRADED
+            HlpatchCompatibility.INCOMPATIBLE -> ConnectionState.INCOMPATIBLE
+            HlpatchCompatibility.UNREACHABLE, HlpatchCompatibility.NOT_CHECKED -> ConnectionState.DISCONNECTED
+        }
+        return HlpatchCapabilityReport(
+            checkedAt = System.currentTimeMillis(),
+            compatibility = compatibility,
+            endpoints = observations
+        )
+    }
+
     suspend fun il2cppTree(name: String, depth: Int = 2): HlpatchResult =
         get("/il2cpp/tree?name=${java.net.URLEncoder.encode(name, "UTF-8")}&depth=$depth")
 
@@ -67,7 +101,7 @@ class HlpatchClient(private val db: AppDatabase, private val baseUrl: String = "
         } catch (e: Exception) {
             state = ConnectionState.DISCONNECTED
             Log.w("HlpatchClient", "request $path failed: ${e.message}")
-            HlpatchResult(false, 0, "", e.message)
+            HlpatchResult(false, 0, "", e.stackTraceToString())
         }
     }
 
