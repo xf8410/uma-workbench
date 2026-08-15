@@ -31,6 +31,14 @@ object ProtocolHistoryArchive {
     }
 
     /**
+     * Backward-compatible public entry point for the lossless streaming importer.
+     * It deliberately delegates to [importRecords], so existing callers retain the same complete
+     * line errors and continue processing later valid records without any size or count cap.
+     */
+    fun import(reader: Reader, consume: (ProtocolHistoryRecord) -> Unit): ProtocolArchiveImportResult =
+        importRecords(reader, consume)
+
+    /**
      * Reads one complete physical line at a time. Parsing and persistence failures retain the
      * complete source line and processing continues with every later line.
      */
