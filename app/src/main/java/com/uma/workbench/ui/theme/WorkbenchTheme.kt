@@ -32,6 +32,7 @@ object WorkbenchColors {
     val syntaxVariable = Color(0xFF9CDCFE)
     val syntaxProperty = Color(0xFF9CDCFE)
     val syntaxPunctuation = Color(0xFF808080)
+    val syntaxOperator = Color(0xFFD4D4D4)
 }
 
 @Composable
