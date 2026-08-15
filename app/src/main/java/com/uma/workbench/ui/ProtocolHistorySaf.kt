@@ -17,7 +17,7 @@ suspend fun MainViewModel.importProtocolHistoryJsonl(uri: Uri): ProtocolArchiveI
     val context = getApplication<android.app.Application>()
     val store = ProtocolHistoryStore(context)
     return try {
-        ProtocolHistoryTransfer(context.contentResolver, store::append, store::all).import(uri)
+        ProtocolHistoryTransfer(context.contentResolver, store::append, store::all).importRecords(uri)
     } finally {
         reloadProtocolHistory().join()
     }
