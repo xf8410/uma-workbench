@@ -7,6 +7,10 @@ data class StageTransition(val from: AuditStage, val to: AuditStage, val checkpo
 object AuditStageMachine {
     private val order = AuditStage.entries
     fun next(stage: AuditStage): AuditStage? = order.getOrNull(order.indexOf(stage) + 1)
-    fun canResume(stage: AuditStage, checkpoint: String?): Boolean = stage in order && (checkpoint == null || checkpoint.length <= 4_096)
-    fun transition(stage: AuditStage, checkpoint: String?): StageTransition? = next(stage)?.let { StageTransition(stage, it, checkpoint) }
+
+    /** Checkpoints are persisted complete; length does not make otherwise valid work non-resumable. */
+    fun canResume(stage: AuditStage, checkpoint: String?): Boolean = stage in order
+
+    fun transition(stage: AuditStage, checkpoint: String?): StageTransition? =
+        next(stage)?.let { StageTransition(stage, it, checkpoint) }
 }
