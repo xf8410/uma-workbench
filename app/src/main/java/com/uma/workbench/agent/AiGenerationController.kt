@@ -30,7 +30,19 @@ data class AiGenerationState(
 }
 
 data class AiGenerationRequest(val requestId: String, val messages: List<AiPromptMessage>, val model: String?)
-data class AiPromptMessage(val role: String, val completeContent: String)
+data class AiPromptMessage(
+    val role: String,
+    val completeContent: String,
+    val toolCalls: List<AiToolCall> = emptyList(),
+    val toolCallId: String? = null,
+    val toolName: String? = null
+) {
+    init {
+        require(role.isNotBlank())
+        if (role == "tool") require(!toolCallId.isNullOrBlank()) { "tool 消息必须包含 toolCallId" }
+        if (toolCalls.isNotEmpty()) require(role == "assistant") { "只有 assistant 消息可以包含 toolCalls" }
+    }
+}
 sealed interface AiStreamEvent {
     data class TextDelta(val completeDelta: String) : AiStreamEvent
     data class Usage(val usage: AiTokenUsage) : AiStreamEvent
