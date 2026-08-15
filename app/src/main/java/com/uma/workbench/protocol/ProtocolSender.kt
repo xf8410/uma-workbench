@@ -4,7 +4,6 @@ import android.content.Context
 import com.uma.workbench.data.AppDatabase
 import com.uma.workbench.hlpatch.HlpatchClient
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
@@ -19,14 +18,18 @@ import javax.net.ssl.X509TrustManager
  * 1. OkHttp 直发 — 不查指纹的接口（社团采集、排行榜）
  * 2. 自定义 TLS — 调 Cipher Suites 仿 BoringSSL
  * 3. hlpatch 转发 — 游戏在线时用原生栈
+ *
+ * Every completed attempt is persisted with all original request/response fields before it is
+ * published to [logs]. Persistence does not cap rows or body sizes and does not filter headers.
  */
 class ProtocolSender(
-    private val context: Context,
-    private val db: AppDatabase,
-    private val hlpatchClient: HlpatchClient
+    context: Context,
+    @Suppress("UNUSED_PARAMETER") db: AppDatabase,
+    private val hlpatchClient: HlpatchClient,
+    historyStore: ProtocolHistoryStore = ProtocolHistoryStore(context)
 ) {
-    private val _logs = MutableStateFlow<List<ProtocolLogEntry>>(emptyList())
-    val logs: StateFlow<List<ProtocolLogEntry>> = _logs
+    private val historyRecorder = ProtocolHistoryRecorder { historyStore.append(it) }
+    val logs: StateFlow<List<ProtocolLogEntry>> = historyRecorder.entries
 
     suspend fun sendDirect(url: String, request: GameRequest, onProgress: (String) -> Unit = {}): GameResponse =
         sendHttp(url, request, SendChannel.OKHTTP_DIRECT, null, onProgress)
@@ -119,7 +122,7 @@ class ProtocolSender(
         SendChannel.HLPATCH_PROXY -> sendViaHlpatch(request, onProgress)
     }
 
-    private fun record(entry: ProtocolLogEntry) { _logs.value = _logs.value + entry }
+    private suspend fun record(entry: ProtocolLogEntry) = historyRecorder.record(entry)
 
     private fun createBoringSslSocketFactory(): SSLSocketFactory {
         val sslContext = SSLContext.getInstance("TLSv1.2").apply { init(null, arrayOf<TrustManager>(BoringTrustManager()), null) }
