@@ -61,9 +61,34 @@ jobs:
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: gradle --no-daemon --stacktrace :app:assembleRelease
-      - name: Run unit tests
+      - name: Run unit tests with complete diagnostics
         if: steps.diagnostic.outcome == 'success'
-        run: gradle --no-daemon --stacktrace :app:testDebugUnitTest
+        shell: bash
+        run: |
+          mkdir -p build/ci-diagnostics
+          set +e
+          gradle --no-daemon --stacktrace :app:testDebugUnitTest 2>&1 | tee build/ci-diagnostics/testDebugUnitTest.log
+          status=${PIPESTATUS[0]}
+          set -e
+          if (( status != 0 )); then
+            {
+              printf '## testDebugUnitTest.log\n\n```text\n'
+              cat build/ci-diagnostics/testDebugUnitTest.log
+              printf '\n```\n\n## Complete JUnit XML\n'
+              while IFS= read -r -d '' report; do
+                printf '\n### `%s`\n\n```xml\n' "$report"
+                cat "$report"
+                printf '\n```\n'
+              done < <(find app/build/test-results -type f -name '*.xml' -print0 2>/dev/null | sort -z)
+            } >> "$GITHUB_STEP_SUMMARY"
+            while IFS= read -r line; do
+              escaped=${line//'%'/'%25'}
+              escaped=${escaped//$'\r'/'%0D'}
+              escaped=${escaped//$'\n'/'%0A'}
+              printf '::error title=Unit test diagnostic::%s\n' "$escaped"
+            done < <(grep -E '(^|[[:space:]])(FAILED|FAILURE:|Caused by:|AssertionError|expected:)' build/ci-diagnostics/testDebugUnitTest.log || true)
+          fi
+          exit "$status"
       - name: Upload signed debug APK
         uses: actions/upload-artifact@v4
         with:
