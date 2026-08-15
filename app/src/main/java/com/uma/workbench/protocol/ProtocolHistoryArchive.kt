@@ -30,6 +30,10 @@ object ProtocolHistoryArchive {
         return count
     }
 
+    /**
+     * Reads one complete physical line at a time. Parsing and persistence failures retain the
+     * complete source line and processing continues with every later line.
+     */
     fun import(reader: Reader, consume: (ProtocolHistoryRecord) -> Unit): ProtocolArchiveImportResult {
         var lineNumber = 0L
         var imported = 0L
@@ -42,9 +46,14 @@ object ProtocolHistoryArchive {
                 errors += ProtocolArchiveLineError(lineNumber, line, "empty JSONL record")
                 continue
             }
-            runCatching { decode(json.parseToJsonElement(line).jsonObject) }
-                .onSuccess { record -> consume(record); imported++ }
-                .onFailure { error -> errors += ProtocolArchiveLineError(lineNumber, line, error.message ?: error::class.java.name) }
+            runCatching {
+                val record = decode(json.parseToJsonElement(line).jsonObject)
+                consume(record)
+            }.onSuccess {
+                imported++
+            }.onFailure { error ->
+                errors += ProtocolArchiveLineError(lineNumber, line, error.message ?: error::class.java.name)
+            }
         }
         return ProtocolArchiveImportResult(imported, lineNumber, errors)
     }
