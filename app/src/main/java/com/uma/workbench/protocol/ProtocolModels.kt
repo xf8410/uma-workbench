@@ -12,12 +12,12 @@ data class GameSession(
     val resVerHash: String?,
     val deviceId: String?,
     val deviceName: String?,
-    val platform: String = "Android",
     val platformOsVersion: String?,
     val capturedAt: Long,
     val source: SessionSource,
     val bound: Boolean,             // SID 是否已绑定 viewer_id
-    val expired: Boolean = false
+    val expired: Boolean = false,
+    val platform: String = "Android"
 )
 
 enum class SessionSource { GAME_DUMP, MANUAL_INPUT, HLPATCH }
