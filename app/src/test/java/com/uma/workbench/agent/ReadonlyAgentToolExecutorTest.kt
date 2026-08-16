@@ -37,7 +37,7 @@ class ReadonlyAgentToolExecutorTest {
         assertEquals(10, result.totalCharacterCount)
         assertEquals(null, result.nextOffset)
         assertTrue(result.complete)
-        val reread = (executor.execute(AiToolCall(0, "b", "read_tool_result", """{"resultId":"${result.resultId}"}"")) as AgentToolOutcome.Success).result
+        val reread = (executor.execute(AiToolCall(0, "b", "read_tool_result", """{"resultId":"${result.resultId}"}""")) as AgentToolOutcome.Success).result
         assertEquals("0123456789", reread.content)
         assertTrue(reread.complete)
     }
