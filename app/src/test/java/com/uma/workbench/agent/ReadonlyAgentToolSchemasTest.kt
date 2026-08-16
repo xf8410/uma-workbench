@@ -15,6 +15,15 @@ class ReadonlyAgentToolSchemasTest {
         assertEquals(ReadonlyAgentToolPolicy.allowedNames, names)
         assertFalse(names.any { it.contains("write") || it.contains("delete") || it.contains("apply") })
         assertTrue("read_tool_result" in names)
+        assertTrue("delegate_subagents" in names)
+    }
+
+    @Test fun childSchemaExcludesRecursiveDelegation() {
+        val names = ReadonlyAgentToolSchemas.childReadOnly.map {
+            it.jsonObject["function"]!!.jsonObject["name"]!!.jsonPrimitive.content
+        }.toSet()
+        assertFalse("delegate_subagents" in names)
+        assertEquals(ReadonlyAgentToolPolicy.allowedNames - "delegate_subagents", names)
     }
 
     @Test fun defaultRequestIncludesToolsOnlyWhenExplicitlyEnabled() {
@@ -23,8 +32,9 @@ class ReadonlyAgentToolSchemasTest {
         assertFalse(Json.parseToJsonElement(plain).jsonObject.containsKey("tools"))
         val enabled = adapter.requestBody(AiGenerationRequest("b", listOf(AiPromptMessage("user", "q")), "m", ReadonlyAgentToolSchemas.openAiCompatible), "m")
         val root = Json.parseToJsonElement(enabled).jsonObject
-        assertEquals(11, root["tools"]!!.jsonArray.size)
+        assertEquals(ReadonlyAgentToolPolicy.allowedNames.size, root["tools"]!!.jsonArray.size)
         assertEquals("auto", root["tool_choice"]!!.jsonPrimitive.content)
         assertTrue(enabled.contains("read_tool_result"))
+        assertTrue(enabled.contains("delegate_subagents"))
     }
 }
