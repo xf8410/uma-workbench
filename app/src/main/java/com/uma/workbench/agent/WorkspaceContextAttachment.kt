@@ -13,7 +13,7 @@ data class ActiveWorkspaceDocument(
     val title: String
 )
 
-/** Shared UI bridge; it contains document identity only, never a copy of file contents. */
+/** Shared UI bridge containing the active document identity. */
 object ActiveWorkspaceDocumentBridge {
     private val _document = MutableStateFlow<ActiveWorkspaceDocument?>(null)
     val document: StateFlow<ActiveWorkspaceDocument?> = _document.asStateFlow()
@@ -26,7 +26,7 @@ object ActiveWorkspaceDocumentBridge {
 data class WorkspaceContextAttachment(
     val id: String = UUID.randomUUID().toString(),
     val workspaceId: String,
-    val kind: String = "CURRENT_FILE_RANGE",
+    val kind: String = "COMPLETE_FILE",
     val uri: String,
     val title: String,
     val startLine: Int,
@@ -37,15 +37,36 @@ data class WorkspaceContextAttachment(
     val sha256: String
 ) {
     init {
-        require(startLine >= 1)
-        require(endLine >= startLine)
-        require(totalLines >= endLine)
+        require(startLine == 1)
+        require(endLine == totalLines)
+        require(totalLines >= 1)
+        require(completeCharacterCount == content.length)
     }
 
     val sentCharacterCount: Int get() = content.length
 }
 
 object WorkspaceContextAttachmentFactory {
+    fun fromCompleteText(
+        workspaceId: String,
+        uri: String,
+        title: String,
+        completeText: String
+    ): WorkspaceContextAttachment {
+        val totalLines = completeText.count { it == '\n' } + 1
+        return WorkspaceContextAttachment(
+            workspaceId = workspaceId,
+            uri = uri,
+            title = title,
+            startLine = 1,
+            endLine = totalLines,
+            totalLines = totalLines,
+            completeCharacterCount = completeText.length,
+            content = completeText,
+            sha256 = sha256(completeText)
+        )
+    }
+
     fun fromText(
         workspaceId: String,
         uri: String,
@@ -56,25 +77,7 @@ object WorkspaceContextAttachmentFactory {
     ): WorkspaceContextAttachment {
         require(startLine >= 1) { "起始行必须大于 0" }
         require(endLine >= startLine) { "结束行不能小于起始行" }
-        val starts = mutableListOf(0)
-        completeText.forEachIndexed { index, char -> if (char == '\n' && index + 1 < completeText.length) starts += index + 1 }
-        val totalLines = starts.size
-        require(startLine <= totalLines) { "起始行 $startLine 超出文件总行数 $totalLines" }
-        val exactEndLine = endLine.coerceAtMost(totalLines)
-        val startOffset = starts[startLine - 1]
-        val endOffset = if (exactEndLine < totalLines) starts[exactEndLine] else completeText.length
-        val selected = completeText.substring(startOffset, endOffset)
-        return WorkspaceContextAttachment(
-            workspaceId = workspaceId,
-            uri = uri,
-            title = title,
-            startLine = startLine,
-            endLine = exactEndLine,
-            totalLines = totalLines,
-            completeCharacterCount = completeText.length,
-            content = selected,
-            sha256 = sha256(completeText)
-        )
+        return fromCompleteText(workspaceId, uri, title, completeText)
     }
 
     private fun sha256(text: String): String = MessageDigest.getInstance("SHA-256")
@@ -89,16 +92,16 @@ object WorkspaceContextPromptComposer {
             append(userText)
             append("\n\n[本轮实际上下文附件]\n")
             attachments.forEach { attachment ->
-                append("\n--- 附件 ${attachment.title} L${attachment.startLine}-L${attachment.endLine} ---\n")
+                append("\n--- 完整附件 ${attachment.title} ---\n")
                 append("workspaceId: ${attachment.workspaceId}\n")
                 append("uri: ${attachment.uri}\n")
                 append("完整字符数: ${attachment.completeCharacterCount}\n")
                 append("完整行数: ${attachment.totalLines}\n")
                 append("文件SHA-256: ${attachment.sha256}\n")
-                append("实际发送内容:\n")
+                append("完整内容:\n")
                 append(attachment.content)
                 if (!attachment.content.endsWith('\n')) append('\n')
-                append("--- 附件结束 ---\n")
+                append("--- 完整附件结束 ---\n")
             }
         }
     }
@@ -117,7 +120,8 @@ object WorkspaceContextPromptComposer {
                 "\"totalLines\":${attachment.totalLines}",
                 "\"completeCharacterCount\":${attachment.completeCharacterCount}",
                 "\"sentCharacterCount\":${attachment.sentCharacterCount}",
-                "\"sha256\":\"${attachment.sha256}\""
+                "\"sha256\":\"${attachment.sha256}\"",
+                "\"content\":\"${escape(attachment.content)}\""
             ).joinToString(",") + "}"
         }
     }
