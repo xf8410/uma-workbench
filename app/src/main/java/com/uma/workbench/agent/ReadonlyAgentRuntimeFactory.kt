@@ -2,8 +2,7 @@ package com.uma.workbench.agent
 
 /**
  * Builds the production root Agent and its non-recursive child Agents from the same provider,
- * workspace-bound read source and durable result store. Each child gets an independent loop/cache,
- * while complete evidence remains readable from the conversation's shared result store.
+ * workspace-bound read source and durable complete-result store.
  */
 class ReadonlyAgentRuntimeFactory(
     private val provider: AiStreamingProvider,
@@ -11,7 +10,6 @@ class ReadonlyAgentRuntimeFactory(
     private val resultStore: AgentToolResultStore,
     private val rootLoopLimits: ReadonlyAgentLoopLimits = ReadonlyAgentLoopLimits(),
     private val childLoopLimits: ReadonlyAgentLoopLimits = ReadonlyAgentLoopLimits(),
-    private val toolLimits: AgentToolExecutionLimits = AgentToolExecutionLimits(),
     private val subAgentLimits: SubAgentLimits = SubAgentLimits()
 ) {
     fun createRootLoop(): ReadonlyAgentLoop {
@@ -35,7 +33,6 @@ class ReadonlyAgentRuntimeFactory(
 
     private fun createExecutor() = ReadonlyAgentToolExecutor(
         source = source,
-        limits = toolLimits,
         resultStore = resultStore
     )
 }
