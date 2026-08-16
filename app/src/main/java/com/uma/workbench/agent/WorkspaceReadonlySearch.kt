@@ -23,6 +23,18 @@ data class WorkspaceSearchFailure(
     val completeError: String
 )
 
+data class WorkspaceSearchLimits(
+    val maxDocuments: Int = 200,
+    val maxCharactersPerDocument: Int = 500_000,
+    val maxMatchesPerPage: Int = 50
+) {
+    init {
+        require(maxDocuments > 0)
+        require(maxCharactersPerDocument > 0)
+        require(maxMatchesPerPage > 0)
+    }
+}
+
 data class WorkspaceSearchPage(
     val query: String,
     val caseSensitive: Boolean,
@@ -45,7 +57,8 @@ fun interface WorkspaceDocumentTextReader {
 }
 
 class WorkspaceReadonlySearch(
-    private val reader: WorkspaceDocumentTextReader
+    private val reader: WorkspaceDocumentTextReader,
+    private val limits: WorkspaceSearchLimits = WorkspaceSearchLimits()
 ) {
     suspend fun search(
         documents: List<WorkspaceSearchDocument>,
@@ -57,26 +70,39 @@ class WorkspaceReadonlySearch(
         require(offset >= 0) { "Search offset must not be negative" }
 
         val deduplicated = documents.distinctBy { Triple(it.workspaceId, it.uri, it.title) }
+        val selected = deduplicated.take(limits.maxDocuments)
         val allMatches = mutableListOf<WorkspaceSearchMatch>()
         val failures = mutableListOf<WorkspaceSearchFailure>()
+        val partialUris = mutableListOf<String>()
 
-        deduplicated.forEach { document ->
+        selected.forEach { document ->
             runCatching { reader.readCompleteText(document) }
-                .onSuccess { completeText -> collectMatches(document, completeText, query, caseSensitive, allMatches) }
+                .onSuccess { completeText ->
+                    val effectiveText = if (completeText.length > limits.maxCharactersPerDocument) {
+                        partialUris += document.uri
+                        completeText.take(limits.maxCharactersPerDocument)
+                    } else {
+                        completeText
+                    }
+                    collectMatches(document, effectiveText, query, caseSensitive, allMatches)
+                }
                 .onFailure { error -> failures += WorkspaceSearchFailure(document.uri, error.stackTraceToString()) }
         }
+
+        val pageMatches = allMatches.drop(offset).take(limits.maxMatchesPerPage)
+        val nextOffset = (offset + pageMatches.size).takeIf { it < allMatches.size }
 
         return WorkspaceSearchPage(
             query = query,
             caseSensitive = caseSensitive,
-            offset = 0,
-            matches = allMatches,
+            offset = offset,
+            matches = pageMatches,
             totalMatches = allMatches.size,
-            nextOffset = null,
-            scannedDocuments = deduplicated.size,
+            nextOffset = nextOffset,
+            scannedDocuments = selected.size,
             availableDocuments = deduplicated.size,
-            documentsExcludedByLimit = 0,
-            partiallyScannedUris = emptyList(),
+            documentsExcludedByLimit = (deduplicated.size - selected.size).coerceAtLeast(0),
+            partiallyScannedUris = partialUris,
             failures = failures
         )
     }
