@@ -14,7 +14,7 @@ object ReadonlyAgentToolPolicy {
     val allowedNames: Set<String> = linkedSetOf(
         "list_workspace_files", "read_current_file", "read_file", "read_file_range",
         "search_workspace", "search_symbol", "read_il2cpp_class", "read_protocol_record",
-        "read_so_snapshot", "read_doc", "read_tool_result"
+        "read_so_snapshot", "read_doc", "read_tool_result", "delegate_subagents"
     )
     val toolsAllowingEmptyArguments: Set<String> = setOf(
         "list_workspace_files", "read_current_file", "read_so_snapshot"
