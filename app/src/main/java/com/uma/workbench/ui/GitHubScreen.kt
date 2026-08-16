@@ -75,7 +75,7 @@ fun GitHubScreen(viewModel: GitHubViewModel) {
             }
 
             state.file != null -> {
-                val file = state.file
+                val file = requireNotNull(state.file)
                 Column(Modifier.fillMaxSize()) {
                     Row(
                         Modifier.fillMaxWidth().padding(8.dp),
@@ -134,7 +134,7 @@ private fun RepositoryList(state: GitHubUiState, viewModel: GitHubViewModel) {
 
 @Composable
 private fun RepositoryBrowser(state: GitHubUiState, viewModel: GitHubViewModel) {
-    val repository = state.selectedRepository ?: return
+    val repository = requireNotNull(state.selectedRepository)
     Column(Modifier.fillMaxSize().padding(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = viewModel::closeRepository) { Icon(Icons.Default.ArrowBack, "返回仓库列表") }
