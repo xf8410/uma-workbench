@@ -21,6 +21,13 @@ class GitHubCredentialStore(context: Context) {
         preferences.edit().putString(TOKEN, encrypt(token.trim())).apply()
     }
 
+    /** OAuth App client IDs are public identifiers, not credentials. */
+    fun loadClientId(): String = preferences.getString(CLIENT_ID, "").orEmpty()
+
+    fun saveClientId(clientId: String) {
+        preferences.edit().putString(CLIENT_ID, clientId.trim()).apply()
+    }
+
     fun clear() {
         preferences.edit().remove(TOKEN).apply()
     }
@@ -69,6 +76,7 @@ class GitHubCredentialStore(context: Context) {
     private companion object {
         const val PREFERENCES = "github-credentials"
         const val TOKEN = "token"
+        const val CLIENT_ID = "oauth-client-id"
         const val ALIAS = "uma-workbench-github-token"
         const val TRANSFORMATION = "AES/GCM/NoPadding"
         const val IV_BYTES = 12
