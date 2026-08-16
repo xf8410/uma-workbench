@@ -7,8 +7,11 @@ import com.uma.workbench.github.GitContent
 import com.uma.workbench.github.GitHubAccount
 import com.uma.workbench.github.GitHubApiClient
 import com.uma.workbench.github.GitHubCredentialStore
+import com.uma.workbench.github.GitHubDeviceCode
+import com.uma.workbench.github.GitHubDeviceFlow
 import com.uma.workbench.github.GitHubFileContent
 import com.uma.workbench.github.GitHubRepositorySummary
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -23,16 +26,56 @@ data class GitHubUiState(
     val path: String = "",
     val directory: List<GitContent> = emptyList(),
     val file: GitHubFileContent? = null,
+    val oauthClientId: String = "",
+    val deviceCode: GitHubDeviceCode? = null,
     val error: String? = null
 )
 
 class GitHubViewModel(application: Application) : AndroidViewModel(application) {
     private val credentialStore = GitHubCredentialStore(application)
-    private val _state = MutableStateFlow(GitHubUiState(tokenPresent = credentialStore.loadToken().isNotEmpty()))
+    private val deviceFlow = GitHubDeviceFlow()
+    private var deviceFlowJob: Job? = null
+    private val _state = MutableStateFlow(
+        GitHubUiState(
+            tokenPresent = credentialStore.loadToken().isNotEmpty(),
+            oauthClientId = credentialStore.loadClientId()
+        )
+    )
     val state: StateFlow<GitHubUiState> = _state
 
     init {
         if (_state.value.tokenPresent) refreshAccountAndRepositories()
+    }
+
+    fun setOAuthClientId(value: String) {
+        _state.value = _state.value.copy(oauthClientId = value)
+    }
+
+    fun startDeviceFlow() {
+        val clientId = _state.value.oauthClientId.trim()
+        if (clientId.isEmpty()) {
+            _state.value = _state.value.copy(error = "OAuth Client ID 不能为空")
+            return
+        }
+        deviceFlowJob?.cancel()
+        credentialStore.saveClientId(clientId)
+        deviceFlowJob = viewModelScope.launch {
+            updateLoading()
+            runCatching { deviceFlow.requestCode(clientId) }
+                .onSuccess { code ->
+                    _state.value = _state.value.copy(loading = true, deviceCode = code, error = null)
+                    runCatching { deviceFlow.awaitToken(clientId, code) }
+                        .onSuccess { token -> completeLogin(token) }
+                        .onFailure(::showError)
+                }
+                .onFailure(::showError)
+        }
+    }
+
+    fun cancelDeviceFlow() {
+        deviceFlowJob?.cancel()
+        deviceFlowJob = null
+        _state.value = _state.value.copy(loading = false, deviceCode = null, error = null)
     }
 
     fun login(token: String) {
@@ -42,25 +85,16 @@ class GitHubViewModel(application: Application) : AndroidViewModel(application) 
         }
         viewModelScope.launch {
             updateLoading()
-            runCatching {
-                val client = GitHubApiClient(token.trim())
-                val account = client.account()
-                val repositories = client.repositories(1)
-                credentialStore.saveToken(token)
-                account to repositories
-            }.onSuccess { (account, repositories) ->
-                _state.value = GitHubUiState(
-                    tokenPresent = true,
-                    account = account,
-                    repositories = repositories
-                )
-            }.onFailure(::showError)
+            runCatching { completeLoginData(token.trim()) }
+                .onSuccess { (account, repositories) -> saveLogin(token, account, repositories) }
+                .onFailure(::showError)
         }
     }
 
     fun logout() {
+        cancelDeviceFlow()
         credentialStore.clear()
-        _state.value = GitHubUiState()
+        _state.value = GitHubUiState(oauthClientId = credentialStore.loadClientId())
     }
 
     fun refreshAccountAndRepositories() {
@@ -68,18 +102,17 @@ class GitHubViewModel(application: Application) : AndroidViewModel(application) 
         if (token.isEmpty()) return
         viewModelScope.launch {
             updateLoading()
-            runCatching {
-                val client = GitHubApiClient(token)
-                client.account() to client.repositories(1)
-            }.onSuccess { (account, repositories) ->
-                _state.value = _state.value.copy(
-                    tokenPresent = true,
-                    loading = false,
-                    account = account,
-                    repositories = repositories,
-                    error = null
-                )
-            }.onFailure(::showError)
+            runCatching { completeLoginData(token) }
+                .onSuccess { (account, repositories) ->
+                    _state.value = _state.value.copy(
+                        tokenPresent = true,
+                        loading = false,
+                        account = account,
+                        repositories = repositories,
+                        error = null
+                    )
+                }
+                .onFailure(::showError)
         }
     }
 
@@ -103,11 +136,11 @@ class GitHubViewModel(application: Application) : AndroidViewModel(application) 
         val repository = state.selectedRepository ?: return
         viewModelScope.launch {
             updateLoading()
-            runCatching {
-                client().file(repository.owner, repository.name, state.ref, path)
-            }.onSuccess { file ->
-                _state.value = _state.value.copy(loading = false, file = file, error = null)
-            }.onFailure(::showError)
+            runCatching { client().file(repository.owner, repository.name, state.ref, path) }
+                .onSuccess { file ->
+                    _state.value = _state.value.copy(loading = false, file = file, error = null)
+                }
+                .onFailure(::showError)
         }
     }
 
@@ -126,22 +159,48 @@ class GitHubViewModel(application: Application) : AndroidViewModel(application) 
         )
     }
 
+    private suspend fun completeLogin(token: String) {
+        runCatching { completeLoginData(token) }
+            .onSuccess { (account, repositories) -> saveLogin(token, account, repositories) }
+            .onFailure(::showError)
+    }
+
+    private suspend fun completeLoginData(token: String): Pair<GitHubAccount, List<GitHubRepositorySummary>> {
+        val client = GitHubApiClient(token.trim())
+        return client.account() to client.repositories(1)
+    }
+
+    private fun saveLogin(
+        token: String,
+        account: GitHubAccount,
+        repositories: List<GitHubRepositorySummary>
+    ) {
+        credentialStore.saveToken(token)
+        deviceFlowJob = null
+        _state.value = GitHubUiState(
+            tokenPresent = true,
+            account = account,
+            repositories = repositories,
+            oauthClientId = credentialStore.loadClientId()
+        )
+    }
+
     private fun loadDirectory(repository: GitHubRepositorySummary, ref: String, path: String) {
         viewModelScope.launch {
             updateLoading()
-            runCatching {
-                client().directory(repository.owner, repository.name, ref, path)
-            }.onSuccess { entries ->
-                _state.value = _state.value.copy(
-                    loading = false,
-                    selectedRepository = repository,
-                    ref = ref,
-                    path = path,
-                    directory = entries.sortedWith(compareBy<GitContent> { it.type != "dir" }.thenBy { it.path }),
-                    file = null,
-                    error = null
-                )
-            }.onFailure(::showError)
+            runCatching { client().directory(repository.owner, repository.name, ref, path) }
+                .onSuccess { entries ->
+                    _state.value = _state.value.copy(
+                        loading = false,
+                        selectedRepository = repository,
+                        ref = ref,
+                        path = path,
+                        directory = entries.sortedWith(compareBy<GitContent> { it.type != "dir" }.thenBy { it.path }),
+                        file = null,
+                        error = null
+                    )
+                }
+                .onFailure(::showError)
         }
     }
 
@@ -152,6 +211,7 @@ class GitHubViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun showError(error: Throwable) {
-        _state.value = _state.value.copy(loading = false, error = error.message ?: error::class.java.simpleName)
+        deviceFlowJob = null
+        _state.value = _state.value.copy(loading = false, deviceCode = null, error = error.message ?: error::class.java.simpleName)
     }
 }
