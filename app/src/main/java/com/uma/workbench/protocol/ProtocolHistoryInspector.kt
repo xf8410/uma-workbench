@@ -37,11 +37,14 @@ class ProtocolHistoryInspector {
         val second = records.firstOrNull { it.id == _selectedIds.value[1] } ?: return null
         return ProtocolHistoryDiff(
             first, second,
-            ProtocolPayloadDiff.compare(ProtocolHeaders.text(first.requestHeaders), ProtocolHeaders.text(second.requestHeaders)),
+            ProtocolPayloadDiff.compare(headersText(first.requestHeaders), headersText(second.requestHeaders)),
             ProtocolPayloadDiff.compare(first.requestBody, second.requestBody),
-            ProtocolPayloadDiff.compare(ProtocolHeaders.text(first.responseHeaders.orEmpty()), ProtocolHeaders.text(second.responseHeaders.orEmpty())),
+            ProtocolPayloadDiff.compare(headersText(first.responseHeaders), headersText(second.responseHeaders)),
             ProtocolPayloadDiff.compare(first.responseBody.orEmpty(), second.responseBody.orEmpty()),
             ProtocolPayloadDiff.compare(first.responseBodyDecrypted.orEmpty(), second.responseBodyDecrypted.orEmpty())
         )
     }
+
+    private fun headersText(headers: Map<String, String>?): String = headers.orEmpty().entries
+        .joinToString("\n") { (name, value) -> "$name: $value" }
 }
