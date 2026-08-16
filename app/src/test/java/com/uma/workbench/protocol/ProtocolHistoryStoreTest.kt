@@ -26,33 +26,19 @@ class ProtocolHistoryStoreTest {
         assertEquals(longRequest, restored.request.body)
         assertEquals(longResponse, restored.response!!.body)
     }
-
     @Test fun headerCodecRoundTripsNamesUnicodeAndCompleteValues() {
-        val headers = linkedMapOf(
-            "Authorization" to "token-" + "甲".repeat(20_000),
-            "Set-Cookie" to "a=b; Path=/; HttpOnly",
-            "X-Quotes" to "\\\"quoted\"\nnext-line"
-        )
-        val expected = ProtocolHeaders.fromMap(headers)
-        val restored = ProtocolHeaderCodec.decode(ProtocolHeaderCodec.encode(headers))
-        assertEquals(expected, restored)
+        val headers = linkedMapOf("Authorization" to "token-" + "甲".repeat(20_000), "Set-Cookie" to "a=b; Path=/; HttpOnly", "X-Quotes" to "\\\"quoted\"\nnext-line")
+        assertEquals(headers, ProtocolHeaderCodec.decode(ProtocolHeaderCodec.encode(headers)))
     }
-
     @Test fun failedRequestKeepsErrorAndHasNoInventedResponse() {
-        val entry = ProtocolLogEntry(1L, GameRequest(GameEndpoint.LOGIN, "complete-sid", 8410L, "complete-body"), null, "complete network error", SendChannel.OKHTTP_DIRECT)
-        val record = ProtocolHistoryRecord.from(entry)
-        assertNull(record.responseBody)
-        assertEquals("complete network error", record.error)
-        assertNull(record.toLogEntry().response)
+        val record = ProtocolHistoryRecord.from(ProtocolLogEntry(1L, GameRequest(GameEndpoint.LOGIN, "complete-sid", 8410L, "complete-body"), null, "complete network error", SendChannel.OKHTTP_DIRECT))
+        assertNull(record.responseBody); assertEquals("complete network error", record.error); assertNull(record.toLogEntry().response)
     }
-
     @Test fun comparisonModelRetainsBothRecordsAndCompleteDiffValues() {
         val first = ProtocolHistoryRecord.from(ProtocolLogEntry(1L, GameRequest(GameEndpoint.LOGIN, "sid-1", 1L, "{\"value\":\"${"A".repeat(12_000)}\"}"), null, null, SendChannel.OKHTTP_DIRECT))
         val second = ProtocolHistoryRecord.from(ProtocolLogEntry(2L, GameRequest(GameEndpoint.LOGIN, "sid-2", 2L, "{\"value\":\"${"B".repeat(13_000)}\"}"), null, null, SendChannel.OKHTTP_DIRECT))
-        val diff = ProtocolPayloadDiff.compare(first.requestBody, second.requestBody)
-        val comparison = ProtocolHistoryComparison(first, second, diff, emptyList())
-        assertSame(first, comparison.first)
-        assertSame(second, comparison.second)
+        val comparison = ProtocolHistoryComparison(first, second, ProtocolPayloadDiff.compare(first.requestBody, second.requestBody), emptyList())
+        assertSame(first, comparison.first); assertSame(second, comparison.second)
         assertTrue(comparison.requestBody.single().before!!.contains("A".repeat(12_000)))
         assertTrue(comparison.requestBody.single().after!!.contains("B".repeat(13_000)))
     }
