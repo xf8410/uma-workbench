@@ -3,9 +3,9 @@ package com.uma.workbench.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.uma.workbench.github.GitContent
 import com.uma.workbench.github.GitHubAccount
 import com.uma.workbench.github.GitHubApiClient
-import com.uma.workbench.github.GitHubContent
 import com.uma.workbench.github.GitHubCredentialStore
 import com.uma.workbench.github.GitHubFileContent
 import com.uma.workbench.github.GitHubRepositorySummary
@@ -21,7 +21,7 @@ data class GitHubUiState(
     val selectedRepository: GitHubRepositorySummary? = null,
     val ref: String = "",
     val path: String = "",
-    val directory: List<GitHubContent> = emptyList(),
+    val directory: List<GitContent> = emptyList(),
     val file: GitHubFileContent? = null,
     val error: String? = null
 )
@@ -137,7 +137,7 @@ class GitHubViewModel(application: Application) : AndroidViewModel(application) 
                     selectedRepository = repository,
                     ref = ref,
                     path = path,
-                    directory = entries.sortedWith(compareBy<GitHubContent> { it.type != "dir" }.thenBy { it.path }),
+                    directory = entries.sortedWith(compareBy<GitContent> { it.type != "dir" }.thenBy { it.path }),
                     file = null,
                     error = null
                 )
