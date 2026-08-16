@@ -49,9 +49,10 @@ class ProtocolEditorDefaultsTest {
         assertTrue(defaults.body.contains("\"viewer_id\": 0"))
     }
 
-    @Test fun unknownEndpointFallsBackToLoginWithoutChangingCredentials() {
+    @Test fun unknownEndpointRetainsCredentialsAndUsesViewerIdTemplate() {
         val defaults = ProtocolEditorDefaultsFactory.create("unknown", session)
         assertEquals(completeSid, defaults.sid)
-        assertTrue(defaults.body.contains("complete-token-value"))
+        assertEquals("8410", defaults.viewerId)
+        assertTrue(defaults.body.contains("\"viewer_id\": 8410"))
     }
 }
