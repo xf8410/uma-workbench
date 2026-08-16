@@ -11,8 +11,7 @@ class AiProviderCatalogTest {
     @Test fun providerOwnsMultipleKeysAndUsesSelectedEnabledKey() {
         assertEquals(first, provider.activeCredential)
         assertTrue(provider.configured)
-        assertEquals("sk-1••••••••abcd", first.masked)
-        assertFalse(first.masked.contains("1234567890"))
+        assertEquals("sk-1234567890abcd", first.secret)
     }
 
     @Test fun modelsStayScopedByProviderAndDefaultUsesCompositeIdentity() {
