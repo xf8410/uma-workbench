@@ -13,15 +13,6 @@ import javax.net.ssl.SSLSocketFactory
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 
-/**
- * 育成协议请求发送器。三条通道：
- * 1. OkHttp 直发 — 不查指纹的接口（社团采集、排行榜）
- * 2. 自定义 TLS — 调 Cipher Suites 仿 BoringSSL
- * 3. hlpatch 转发 — 游戏在线时用原生栈
- *
- * Every completed attempt is persisted with all original request/response fields before it is
- * published to [logs]. Persistence does not cap rows or body sizes and does not filter headers.
- */
 class ProtocolSender(
     context: Context,
     @Suppress("UNUSED_PARAMETER") db: AppDatabase,
@@ -47,46 +38,47 @@ class ProtocolSender(
         val start = System.currentTimeMillis()
         try {
             onProgress("正在发送…")
-            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+            val connection = (URL(url).openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
                 connectTimeout = 15_000
                 readTimeout = 30_000
                 setRequestProperty("Content-Type", "application/octet-stream")
                 setRequestProperty("User-Agent", "UnityPlayer/2022.3.62f2")
                 doOutput = true
-                request.headers.forEach { (k, v) -> setRequestProperty(k, v) }
+                ProtocolHttpHeaders.addRequestEntries(this, request.headerEntries)
                 request.sid?.let { setRequestProperty("SID", it) }
                 request.viewerId?.let { setRequestProperty("ViewerID", it.toString()) }
             }
-            if (sslSocketFactory != null && conn is javax.net.ssl.HttpsURLConnection) {
-                conn.sslSocketFactory = sslSocketFactory
-                conn.hostnameVerifier = javax.net.ssl.HostnameVerifier { _, _ -> true }
+            if (sslSocketFactory != null && connection is javax.net.ssl.HttpsURLConnection) {
+                connection.sslSocketFactory = sslSocketFactory
+                connection.hostnameVerifier = javax.net.ssl.HostnameVerifier { _, _ -> true }
             }
-            conn.outputStream.use { it.write(request.body.toByteArray(Charsets.UTF_8)) }
-            val code = conn.responseCode
-            val respHeaders = conn.headerFields.entries.filter { it.key != null }
-                .associate { it.key to it.value.joinToString(",") }
-            val respBody = (if (code in 200..299) conn.inputStream else conn.errorStream)
+            connection.outputStream.use { it.write(request.body.toByteArray(Charsets.UTF_8)) }
+            val code = connection.responseCode
+            val responseHeaderEntries = ProtocolHttpHeaders.responseEntries(connection.headerFields)
+            val responseHeaders = ProtocolHeaders.toMap(responseHeaderEntries)
+            val responseBody = (if (code in 200..299) connection.inputStream else connection.errorStream)
                 ?.bufferedReader()?.use { it.readText() } ?: ""
-            val interpreted = ProtocolResponseInterpreter.interpret(code, respBody)
-            val resp = GameResponse(
+            val interpreted = ProtocolResponseInterpreter.interpret(code, responseBody)
+            val response = GameResponse(
                 statusCode = code,
                 protocolCode = ProtocolStatusCode.fromCode(interpreted.protocolCode),
-                headers = respHeaders,
-                body = respBody,
+                headers = responseHeaders,
+                body = responseBody,
                 bodyDecrypted = null,
                 latencyMs = System.currentTimeMillis() - start,
                 timestamp = System.currentTimeMillis(),
-                success = code in 200..299 && interpreted.protocolCode == 200
+                success = code in 200..299 && interpreted.protocolCode == 200,
+                headerEntries = responseHeaderEntries
             )
-            record(ProtocolLogEntry(System.currentTimeMillis(), request, resp, null, channel))
-            onProgress(if (resp.success) "成功 (${resp.latencyMs}ms)" else "失败: ${interpreted.diagnosis.title}")
-            resp
-        } catch (e: Exception) {
-            val resp = GameResponse(0, ProtocolStatusCode.UNKNOWN, emptyMap(), "", null, System.currentTimeMillis() - start, System.currentTimeMillis(), false)
-            record(ProtocolLogEntry(System.currentTimeMillis(), request, null, e.message, channel))
-            onProgress("错误: ${e.message}")
-            resp
+            record(ProtocolLogEntry(System.currentTimeMillis(), request, response, null, channel))
+            onProgress(if (response.success) "成功 (${response.latencyMs}ms)" else "失败: ${interpreted.diagnosis.title}")
+            response
+        } catch (error: Exception) {
+            val response = GameResponse(0, ProtocolStatusCode.UNKNOWN, emptyMap(), "", null, System.currentTimeMillis() - start, System.currentTimeMillis(), false)
+            record(ProtocolLogEntry(System.currentTimeMillis(), request, null, error.message, channel))
+            onProgress("错误: ${error.message}")
+            response
         }
     }
 
@@ -96,7 +88,7 @@ class ProtocolSender(
             onProgress("正在发送（hlpatch转发）…")
             val result = hlpatchClient.post("/api/proxy", HlpatchProxyEnvelopeCodec.encodeRequest(request))
             val envelope = if (result.ok) runCatching { HlpatchProxyEnvelopeCodec.decodeResponse(result.body) }.getOrNull() else null
-            val resp = when {
+            val response = when {
                 envelope != null -> envelope.toGameResponse(System.currentTimeMillis())
                 result.ok -> {
                     val interpreted = ProtocolResponseInterpreter.interpret(result.statusCode, result.body)
@@ -105,14 +97,14 @@ class ProtocolSender(
                 else -> GameResponse(result.statusCode, ProtocolStatusCode.UNKNOWN, emptyMap(), result.body, null, System.currentTimeMillis() - start, System.currentTimeMillis(), false)
             }
             val error = envelope?.error ?: if (!result.ok) result.error else null
-            record(ProtocolLogEntry(System.currentTimeMillis(), request, resp, error, SendChannel.HLPATCH_PROXY))
-            onProgress(if (resp.success) "成功 (${resp.latencyMs}ms)" else "失败: ${error ?: resp.protocolCode.label}")
-            resp
-        } catch (e: Exception) {
-            val resp = GameResponse(0, ProtocolStatusCode.UNKNOWN, emptyMap(), "", null, System.currentTimeMillis() - start, System.currentTimeMillis(), false)
-            record(ProtocolLogEntry(System.currentTimeMillis(), request, null, e.message, SendChannel.HLPATCH_PROXY))
-            onProgress("错误: ${e.message}")
-            resp
+            record(ProtocolLogEntry(System.currentTimeMillis(), request, response, error, SendChannel.HLPATCH_PROXY))
+            onProgress(if (response.success) "成功 (${response.latencyMs}ms)" else "失败: ${error ?: response.protocolCode.label}")
+            response
+        } catch (error: Exception) {
+            val response = GameResponse(0, ProtocolStatusCode.UNKNOWN, emptyMap(), "", null, System.currentTimeMillis() - start, System.currentTimeMillis(), false)
+            record(ProtocolLogEntry(System.currentTimeMillis(), request, null, error.message, SendChannel.HLPATCH_PROXY))
+            onProgress("错误: ${error.message}")
+            response
         }
     }
 
