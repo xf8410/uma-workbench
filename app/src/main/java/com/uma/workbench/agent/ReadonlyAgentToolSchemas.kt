@@ -8,7 +8,46 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
 object ReadonlyAgentToolSchemas {
+    /** Tools visible to children. Deliberately excludes delegation to prevent recursive fan-out. */
+    val childReadOnly: JsonArray = buildJsonArray { addReadOnlyTools() }
+
+    /** Tools visible to the root Agent. */
     val openAiCompatible: JsonArray = buildJsonArray {
+        addReadOnlyTools()
+        add(buildJsonObject {
+            put("type", "function")
+            put("function", buildJsonObject {
+                put("name", "delegate_subagents")
+                put("description", "将彼此独立的只读证据调查任务分派给受预算约束的子 Agent；仅在任务确实可并行时使用")
+                put("parameters", buildJsonObject {
+                    put("type", "object")
+                    put("additionalProperties", false)
+                    put("properties", buildJsonObject {
+                        put("tasks", buildJsonObject {
+                            put("type", "array")
+                            put("minItems", 1)
+                            put("maxItems", 4)
+                            put("items", buildJsonObject {
+                                put("type", "object")
+                                put("additionalProperties", false)
+                                put("properties", buildJsonObject {
+                                    put("id", buildJsonObject { put("type", "string") })
+                                    put("instruction", buildJsonObject { put("type", "string") })
+                                    put("evidenceRequirements", buildJsonObject { put("type", "string") })
+                                })
+                                put("required", buildJsonArray {
+                                    add(JsonPrimitive("id")); add(JsonPrimitive("instruction"))
+                                })
+                            })
+                        })
+                    })
+                    put("required", buildJsonArray { add(JsonPrimitive("tasks")) })
+                })
+            })
+        })
+    }
+
+    private fun JsonArrayBuilder.addReadOnlyTools() {
         function("list_workspace_files", "列出当前工作区允许读取的文件")
         function("read_current_file", "读取当前活动文件；较大结果返回 resultId 和下一 offset，可用 read_tool_result 继续完整读取")
         function("read_file", "按工作区 URI 读取文件", strings = listOf("uri"), required = listOf("uri"))
