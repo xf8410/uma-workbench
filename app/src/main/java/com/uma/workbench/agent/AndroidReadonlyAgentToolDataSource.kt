@@ -17,24 +17,22 @@ class AndroidReadonlyAgentToolDataSource(
     context: Context,
     private val database: AppDatabase,
     private val workspaceId: String,
-    private val activeDocument: () -> ActiveWorkspaceDocument?,
-    private val searchLimits: WorkspaceSearchLimits = WorkspaceSearchLimits()
+    private val activeDocument: () -> ActiveWorkspaceDocument?
 ) : ReadonlyAgentToolDataSource {
     private val appContext = context.applicationContext
     private val protocolStore = ProtocolHistoryStore(appContext)
     private val hlpatch = HlpatchClient(database)
-    private val search = WorkspaceReadonlySearch(WorkspaceDocumentTextReader { readAllowedFile(it.uri) }, searchLimits)
+    private val search = WorkspaceReadonlySearch(WorkspaceDocumentTextReader { readAllowedFile(it.uri) })
 
     override suspend fun listWorkspaceFiles(): String { val documents = allowedDocuments(); require(documents.isNotEmpty()) { "当前工作区没有可读取文件" }; return buildString { appendLine("workspaceId=$workspaceId"); appendLine("files=${documents.size}"); documents.forEachIndexed { index, d -> appendLine("[$index] ${d.title}"); appendLine("uri=${d.uri}") } }.trimEnd() }
     override suspend fun readCurrentFile(): String { val d = activeDocument()?.takeIf { it.workspaceId == workspaceId } ?: error("当前工作区没有活动文件"); return renderFile(d.title, d.uri, readAllowedFile(d.uri)) }
     override suspend fun readFile(uri: String): String { val d = requireAllowedDocument(uri); return renderFile(d.title, d.uri, readAllowedFile(uri)) }
-    override suspend fun readFileRange(uri: String, startLine: Int, endLine: Int): String { val d = requireAllowedDocument(uri); val a = WorkspaceContextAttachmentFactory.fromText(workspaceId, uri, d.title, readAllowedFile(uri), startLine, endLine); return "title=${a.title}\nuri=${a.uri}\nlines=${a.startLine}-${a.endLine}/${a.totalLines}\ncompleteCharacterCount=${a.completeCharacterCount}\nsha256=${a.sha256}\n${a.content}" }
+    override suspend fun readFileRange(uri: String, startLine: Int, endLine: Int): String { val d = requireAllowedDocument(uri); return renderFile(d.title, d.uri, readAllowedFile(uri)) }
     override suspend fun searchWorkspace(query: String, offset: Int, caseSensitive: Boolean) = renderSearch(search.search(allowedDocuments(), query, offset, caseSensitive), "workspace")
     override suspend fun searchSymbol(query: String, offset: Int) = renderSearch(search.search(allowedDocuments(), query, offset, true), "symbol-literal")
     override suspend fun readIl2CppClass(className: String): String { require(className.isNotBlank()); val fields = hlpatch.il2cppFields(className); val methods = hlpatch.il2cppMethods(className); return "className=$className\nfieldsEndpoint=${fields.endpoint}\nfieldsHttp=${fields.statusCode}\nfieldsBody:\n${fields.responseBody}\nfieldsError:\n${fields.error.orEmpty()}\nmethodsEndpoint=${methods.endpoint}\nmethodsHttp=${methods.statusCode}\nmethodsBody:\n${methods.responseBody}\nmethodsError:\n${methods.error.orEmpty()}" }
     override suspend fun readProtocolRecord(id: String) = renderProtocol(protocolStore.get(id) ?: error("找不到协议记录 $id"))
 
-    /** SO endpoint is an HTTP relative target, not a filesystem path. Dynamic GET paths and query values pass unchanged. */
     override suspend fun readSoSnapshot(endpoint: String?): String {
         val target = endpoint?.takeIf { it.isNotBlank() } ?: "/summary"
         require(target.startsWith('/')) { "SO endpoint 必须是相对本地服务的 / 路径" }
@@ -47,7 +45,7 @@ class AndroidReadonlyAgentToolDataSource(
     private suspend fun requireAllowedDocument(uri: String) = allowedDocuments().firstOrNull { it.uri == uri } ?: error("拒绝读取不属于当前工作区的 URI：$uri")
     private suspend fun readAllowedFile(uri: String): String { requireAllowedDocument(uri); return withContext(Dispatchers.IO) { appContext.contentResolver.openInputStream(Uri.parse(uri))?.use { String(it.readBytes(), Charsets.UTF_8) } ?: error("无法打开 $uri") } }
     private fun renderFile(title: String, uri: String, content: String) = "title=$title\nuri=$uri\ncompleteCharacterCount=${content.length}\ncontent:\n$content"
-    private fun renderSearch(p: WorkspaceSearchPage, scope: String) = buildString { appendLine("scope=$scope\nquery=${p.query}\noffset=${p.offset}\ntotalMatches=${p.totalMatches}\nnextOffset=${p.nextOffset ?: ""}\ncompleteScan=${p.isCompleteDocumentScan}\nscannedDocuments=${p.scannedDocuments}/${p.availableDocuments}"); p.partiallyScannedUris.forEach { appendLine("partiallyScanned=$it") }; p.failures.forEach { appendLine("readFailure=${it.uri}\n${it.completeError}") }; p.matches.forEachIndexed { i, m -> appendLine("[$i] ${m.title} L${m.lineNumber}:C${m.columnNumber}\nuri=${m.uri}\n${m.completeLine}") } }.trimEnd()
+    private fun renderSearch(p: WorkspaceSearchPage, scope: String) = buildString { appendLine("scope=$scope\nquery=${p.query}\ntotalMatches=${p.totalMatches}\ncompleteScan=${p.isCompleteDocumentScan}\nscannedDocuments=${p.scannedDocuments}/${p.availableDocuments}"); p.failures.forEach { appendLine("readFailure=${it.uri}\n${it.completeError}") }; p.matches.forEachIndexed { i, m -> appendLine("[$i] ${m.title} L${m.lineNumber}:C${m.columnNumber}\nuri=${m.uri}\n${m.completeLine}") } }.trimEnd()
     private fun renderProtocol(r: ProtocolHistoryRecord) = "id=${r.id}\ntimestamp=${r.timestamp}\nchannel=${r.channel}\nendpoint=${r.endpoint}\nrequestBodyEncrypted=${r.requestBodyEncrypted}\nrequestBody:\n${r.requestBody}\nhttpStatus=${r.httpStatus ?: ""}\nprotocolCode=${r.protocolCode ?: ""}\nresponseBody:\n${r.responseBody.orEmpty()}\nresponseBodyDecrypted:\n${r.responseBodyDecrypted.orEmpty()}\nlatencyMs=${r.latencyMs ?: ""}\nsuccess=${r.success ?: ""}\nerror:\n${r.error.orEmpty()}"
     private fun renderDoc(d: ArtifactEntity) = "id=${d.id}\ntitle=${d.title}\nformat=${d.format}\nversion=${d.version}\nlocked=${d.locked}\nsha256=${d.sha256.orEmpty()}\ncontent:\n${d.content}"
 }
