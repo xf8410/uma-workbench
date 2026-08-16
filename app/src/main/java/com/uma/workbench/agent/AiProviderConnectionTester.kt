@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.collect
 
 data class AiProviderConnectionTestResult(val model:String,val discoveredModelCount:Int,val responseReceived:Boolean,val completeDetail:String)
 class AiProviderConnectionTester(
- private val discover:suspend(AiProviderProfile)->List<String>={AiModelDiscovery().fetch(it)},
+ private val discover: suspend (AiProviderProfile) -> List<String> = { AiModelDiscovery().fetch(it) },
  private val providerFactory:(()->AiProviderProfile?)->AiStreamingProvider={CatalogAiStreamingProvider(it)}
 ){
  constructor(discovery:AiModelDiscovery):this({discovery.fetch(it)},{CatalogAiStreamingProvider(it)})
