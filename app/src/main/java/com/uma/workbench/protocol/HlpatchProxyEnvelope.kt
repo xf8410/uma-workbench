@@ -18,6 +18,7 @@ data class HlpatchProxyRequestEnvelope(
     val sid: String?,
     val viewerId: Long?,
     val headers: Map<String, String>,
+    val headerEntries: List<ProtocolHeader> = ProtocolHeaders.fromMap(headers),
     val body: String,
     val bodyEncrypted: Boolean,
     val timestamp: Long
@@ -28,6 +29,7 @@ data class HlpatchProxyResponseEnvelope(
     val httpStatus: Int,
     val protocolCode: Int?,
     val headers: Map<String, String>,
+    val headerEntries: List<ProtocolHeader> = ProtocolHeaders.fromMap(headers),
     val body: String,
     val bodyDecrypted: String?,
     val latencyMs: Long,
@@ -42,7 +44,8 @@ data class HlpatchProxyResponseEnvelope(
         bodyDecrypted = bodyDecrypted,
         latencyMs = latencyMs,
         timestamp = timestamp,
-        success = success
+        success = success,
+        headerEntries = headerEntries
     )
 }
 
@@ -51,10 +54,11 @@ object HlpatchProxyEnvelopeCodec {
     private val json = Json
 
     fun from(request: GameRequest) = HlpatchProxyRequestEnvelope(
-        endpoint = request.endpoint.path,
+        endpoint = request.rawEndpoint.ifEmpty { request.endpoint.path },
         sid = request.sid,
         viewerId = request.viewerId,
         headers = request.headers,
+        headerEntries = request.headerEntries,
         body = request.body,
         bodyEncrypted = request.bodyEncrypted,
         timestamp = request.timestamp
@@ -66,7 +70,7 @@ object HlpatchProxyEnvelopeCodec {
         "endpoint" to JsonPrimitive(value.endpoint),
         "sid" to nullable(value.sid),
         "viewer_id" to nullable(value.viewerId),
-        "headers" to encodeHeaders(value.headers),
+        "headers" to encodeHeaderEntries(value.headerEntries),
         "body" to JsonPrimitive(value.body),
         "body_encrypted" to JsonPrimitive(value.bodyEncrypted),
         "timestamp" to JsonPrimitive(value.timestamp)
@@ -78,7 +82,8 @@ object HlpatchProxyEnvelopeCodec {
         endpoint = value.requiredString("endpoint"),
         sid = value.optionalString("sid"),
         viewerId = value.optionalLong("viewer_id"),
-        headers = decodeHeaders(value.requiredObject("headers")),
+        headers = decodeHeaderMap(value.get("headers")),
+        headerEntries = decodeHeaderEntries(value.get("headers")),
         body = value.requiredString("body"),
         bodyEncrypted = value.requiredBoolean("body_encrypted"),
         timestamp = value.requiredLong("timestamp")
@@ -87,7 +92,7 @@ object HlpatchProxyEnvelopeCodec {
     fun encodeResponse(value: HlpatchProxyResponseEnvelope): String = JsonObject(linkedMapOf(
         "http_status" to JsonPrimitive(value.httpStatus),
         "protocol_code" to nullable(value.protocolCode),
-        "headers" to encodeHeaders(value.headers),
+        "headers" to encodeHeaderEntries(value.headerEntries),
         "body" to JsonPrimitive(value.body),
         "body_decrypted" to nullable(value.bodyDecrypted),
         "latency_ms" to JsonPrimitive(value.latencyMs),
@@ -100,7 +105,8 @@ object HlpatchProxyEnvelopeCodec {
         return HlpatchProxyResponseEnvelope(
             httpStatus = value.requiredInt("http_status"),
             protocolCode = value.optionalInt("protocol_code"),
-            headers = decodeHeaders(value.requiredObject("headers")),
+            headers = decodeHeaderMap(value.get("headers")),
+            headerEntries = decodeHeaderEntries(value.get("headers")),
             body = value.requiredString("body"),
             bodyDecrypted = value.optionalString("body_decrypted"),
             latencyMs = value.requiredLong("latency_ms"),
@@ -109,8 +115,39 @@ object HlpatchProxyEnvelopeCodec {
         )
     }
 
-    private fun encodeHeaders(headers: Map<String, String>) = JsonObject(headers.mapValues { JsonPrimitive(it.value) })
-    private fun decodeHeaders(value: JsonObject) = value.mapValues { (_, item) -> item.jsonPrimitive.content }
+    private fun decodeHeaderMap(value: JsonElement?): Map<String, String> {
+        return when (value) {
+            is kotlinx.serialization.json.JsonArray -> ProtocolHeaders.toMap(decodeHeaderEntries(value))
+            is JsonObject -> value.mapValues { (_, item) -> item.jsonPrimitive.content }
+            else -> emptyMap()
+        }
+    }
+
+    private fun encodeHeaderEntries(entries: List<ProtocolHeader>): JsonElement {
+        // 编码为有序数组格式，保留重复项和顺序
+        return kotlinx.serialization.json.JsonArray(entries.map { entry ->
+            JsonObject(linkedMapOf(
+                "name" to JsonPrimitive(entry.name),
+                "value" to JsonPrimitive(entry.value)
+            ))
+        })
+    }
+
+    private fun decodeHeaderEntries(value: JsonElement?): List<ProtocolHeader> {
+        return when (value) {
+            is kotlinx.serialization.json.JsonArray -> value.map { item ->
+                val obj = item.jsonObject
+                ProtocolHeader(
+                    name = obj.getValue("name").jsonPrimitive.content,
+                    value = obj.getValue("value").jsonPrimitive.content
+                )
+            }
+            // 旧格式兼容：JSON object {"name":"value",...}
+            is JsonObject -> value.entries.map { (name, v) -> ProtocolHeader(name, v.jsonPrimitive.content) }
+            else -> emptyList()
+        }
+    }
+
     private fun nullable(value: String?): JsonElement = value?.let(::JsonPrimitive) ?: JsonNull
     private fun nullable(value: Long?): JsonElement = value?.let(::JsonPrimitive) ?: JsonNull
     private fun nullable(value: Int?): JsonElement = value?.let(::JsonPrimitive) ?: JsonNull
@@ -119,7 +156,6 @@ object HlpatchProxyEnvelopeCodec {
     private fun JsonObject.requiredLong(name: String) = get(name)?.jsonPrimitive?.longOrNull ?: error("missing long: $name")
     private fun JsonObject.requiredInt(name: String) = get(name)?.jsonPrimitive?.intOrNull ?: error("missing int: $name")
     private fun JsonObject.requiredBoolean(name: String) = get(name)?.jsonPrimitive?.booleanOrNull ?: error("missing boolean: $name")
-    private fun JsonObject.requiredObject(name: String) = get(name) as? JsonObject ?: error("missing object: $name")
     private fun JsonObject.optionalString(name: String) = get(name).unlessNull()?.jsonPrimitive?.contentOrNull
     private fun JsonObject.optionalLong(name: String) = get(name).unlessNull()?.jsonPrimitive?.longOrNull
     private fun JsonObject.optionalInt(name: String) = get(name).unlessNull()?.jsonPrimitive?.intOrNull

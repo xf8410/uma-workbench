@@ -11,6 +11,7 @@ object ProtocolRequestTemplates {
         GameEndpoint.START_SESSION, GameEndpoint.LOAD_INDEX -> objectBody("viewer_id" to (session?.viewerId ?: 0L).toString())
         GameEndpoint.PRE_SIGNUP -> objectBody("viewer_id" to "0")
         GameEndpoint.SIGNUP -> objectBody("viewer_id" to (session?.viewerId ?: 0L).toString(), "inherit_code" to quoted(session?.inheritCode.orEmpty()))
+        GameEndpoint.UNKNOWN -> objectBody("viewer_id" to (session?.viewerId ?: 0L).toString())
     }
     private fun objectBody(vararg fields: Pair<String, String>) = fields.joinToString(",\n", "{\n", "\n}") { (name, value) -> "  ${quoted(name)}: $value" }
     private fun quoted(value: String) = buildString { append('"'); value.forEach { when (it) { '\\' -> append("\\\\"); '"' -> append("\\\""); '\n' -> append("\\n"); '\r' -> append("\\r"); '\t' -> append("\\t"); else -> append(it) } }; append('"') }

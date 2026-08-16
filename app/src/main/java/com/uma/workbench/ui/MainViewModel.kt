@@ -146,7 +146,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun sendProtocolRequest(endpoint: String, sid: String, viewerId: Long?, body: String, channel: Int) = viewModelScope.launch {
-        val ep = GameEndpoint.entries.find { it.path == endpoint } ?: GameEndpoint.LOGIN; val req = GameRequest(ep, sid.ifBlank { null }, viewerId, body, headers = sessionManager.buildHeaders(activeSession.value))
+        val ep = GameEndpoint.fromPath(endpoint); val req = GameRequest(ep, sid.ifBlank { null }, viewerId, body, headers = sessionManager.buildHeaders(activeSession.value), rawEndpoint = endpoint)
         runCatching { if (channel == 2) protocolSender.sendViaHlpatch(req) else throw IllegalStateException("直连服务器地址尚未由真实配置提供；请求未发送，完整输入仍保留") }
         protocolHistoryTimeline.reload()
     }

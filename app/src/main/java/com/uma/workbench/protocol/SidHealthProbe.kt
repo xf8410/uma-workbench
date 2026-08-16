@@ -18,5 +18,5 @@ class SidHealthProbe(private val clock: () -> Long = System::currentTimeMillis) 
 }
 object LoginChainPlanner {
     fun next(result: SidHealthResult): GameEndpoint? = when (result.diagnosis) { SidDiagnosis.ACTIVE -> null; else -> GameEndpoint.LOGIN }
-    fun remainingFrom(endpoint: GameEndpoint): List<GameEndpoint> = when (endpoint) { GameEndpoint.LOGIN -> listOf(GameEndpoint.LOGIN, GameEndpoint.START_SESSION, GameEndpoint.LOAD_INDEX); GameEndpoint.START_SESSION -> listOf(GameEndpoint.START_SESSION, GameEndpoint.LOAD_INDEX); GameEndpoint.LOAD_INDEX -> listOf(GameEndpoint.LOAD_INDEX); GameEndpoint.BOOT, GameEndpoint.PRE_SIGNUP, GameEndpoint.SIGNUP -> emptyList() }
+    fun remainingFrom(endpoint: GameEndpoint): List<GameEndpoint> = when (endpoint) { GameEndpoint.LOGIN -> listOf(GameEndpoint.LOGIN, GameEndpoint.START_SESSION, GameEndpoint.LOAD_INDEX); GameEndpoint.START_SESSION -> listOf(GameEndpoint.START_SESSION, GameEndpoint.LOAD_INDEX); GameEndpoint.LOAD_INDEX -> listOf(GameEndpoint.LOAD_INDEX); GameEndpoint.BOOT, GameEndpoint.PRE_SIGNUP, GameEndpoint.SIGNUP, GameEndpoint.UNKNOWN -> emptyList() }
 }

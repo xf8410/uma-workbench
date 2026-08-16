@@ -18,7 +18,7 @@ object ProtocolEditorDefaultsFactory {
         currentSid: String = "",
         currentViewerId: String = ""
     ): ProtocolEditorDefaults {
-        val endpoint = GameEndpoint.entries.find { it.path == endpointPath } ?: GameEndpoint.LOGIN
+        val endpoint = GameEndpoint.fromPath(endpointPath)
         return ProtocolEditorDefaults(
             sid = session?.sid ?: currentSid,
             viewerId = session?.viewerId?.toString() ?: currentViewerId,

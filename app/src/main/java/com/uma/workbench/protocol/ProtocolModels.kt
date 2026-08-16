@@ -1,5 +1,7 @@
 package com.uma.workbench.protocol
 
+import kotlinx.serialization.Serializable
+
 /** 安卓端育成协议核心数据模型 */
 
 data class GameSession(
@@ -39,6 +41,19 @@ enum class ProtocolStatusCode(val code: Int, val label: String, val description:
     }
 }
 
+/** 一次 HTTP 头出现。保留顺序、原始名称大小写和重复项。 */
+@Serializable
+data class ProtocolHeader(val name: String, val value: String)
+
+object ProtocolHeaders {
+    fun fromMap(headers: Map<String, String>): List<ProtocolHeader> =
+        headers.entries.map { ProtocolHeader(it.key, it.value) }
+
+    /** 兼容视图。需要无损访问的代码必须使用 entry 列表。 */
+    fun toMap(entries: List<ProtocolHeader>): Map<String, String> =
+        entries.associate { it.name to it.value }
+}
+
 /** 安卓端育成协议关键端点 */
 enum class GameEndpoint(val path: String, val label: String, val description: String) {
     BOOT("boot", "启动握手", "匿名会话，viewer_id=0"),
@@ -47,11 +62,16 @@ enum class GameEndpoint(val path: String, val label: String, val description: St
     LOAD_INDEX("load/index", "进入家园", "加载主页数据"),
     PRE_SIGNUP("tool/pre_signup", "预注册", "viewer_id=0"),
     SIGNUP("tool/signup", "注册", "引继码绑定"),
+    UNKNOWN("", "未知端点", "保留原始端点字符串"),
     ;
 
     /** 完整登录链顺序 */
     companion object {
         val LOGIN_CHAIN = listOf(LOGIN, START_SESSION, LOAD_INDEX)
+
+        /** 按路径匹配已知端点；未匹配时返回 UNKNOWN，调用方应使用 rawEndpoint 保留原始字符串。 */
+        fun fromPath(path: String): GameEndpoint =
+            entries.firstOrNull { it != UNKNOWN && it.path == path } ?: UNKNOWN
     }
 }
 
@@ -62,7 +82,9 @@ data class GameRequest(
     val body: String,
     val bodyEncrypted: Boolean = false,
     val headers: Map<String, String> = emptyMap(),
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val rawEndpoint: String = endpoint.path,
+    val headerEntries: List<ProtocolHeader> = ProtocolHeaders.fromMap(headers)
 )
 
 data class GameResponse(
@@ -73,7 +95,8 @@ data class GameResponse(
     val bodyDecrypted: String?,
     val latencyMs: Long,
     val timestamp: Long,
-    val success: Boolean
+    val success: Boolean,
+    val headerEntries: List<ProtocolHeader> = ProtocolHeaders.fromMap(headers)
 )
 
 data class ProtocolLogEntry(

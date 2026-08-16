@@ -34,24 +34,38 @@ data class ProtocolHistoryRecord(
     val error: String?
 ) {
     fun toLogEntry(): ProtocolLogEntry {
+        val endpointEnum = GameEndpoint.fromPath(endpoint)
         val request = GameRequest(
-            endpoint = GameEndpoint.entries.firstOrNull { it.path == endpoint } ?: GameEndpoint.LOGIN,
+            endpoint = endpointEnum,
             sid = sid,
             viewerId = viewerId,
             body = requestBody,
             bodyEncrypted = requestBodyEncrypted,
             headers = requestHeaders,
-            timestamp = timestamp
+            timestamp = timestamp,
+            rawEndpoint = endpoint,
+            headerEntries = ProtocolHeaders.fromMap(requestHeaders)
         )
         val response = httpStatus?.let { status ->
-            GameResponse(status, ProtocolStatusCode.fromCode(protocolCode ?: status), responseHeaders.orEmpty(), responseBody.orEmpty(), responseBodyDecrypted, latencyMs ?: 0L, timestamp, success == true)
+            GameResponse(
+                statusCode = status,
+                protocolCode = ProtocolStatusCode.fromCode(protocolCode ?: status),
+                headers = responseHeaders.orEmpty(),
+                body = responseBody.orEmpty(),
+                bodyDecrypted = responseBodyDecrypted,
+                latencyMs = latencyMs ?: 0L,
+                timestamp = timestamp,
+                success = success == true,
+                headerEntries = ProtocolHeaders.fromMap(responseHeaders.orEmpty())
+            )
         }
         return ProtocolLogEntry(timestamp, request, response, error, channel)
     }
 
     companion object {
         fun from(entry: ProtocolLogEntry): ProtocolHistoryRecord = ProtocolHistoryRecord(
-            UUID.randomUUID().toString(), entry.timestamp, entry.channel, entry.request.endpoint.path,
+            UUID.randomUUID().toString(), entry.timestamp, entry.channel,
+            entry.request.rawEndpoint.ifEmpty { entry.request.endpoint.path },
             entry.request.sid, entry.request.viewerId, entry.request.headers, entry.request.body,
             entry.request.bodyEncrypted, entry.response?.statusCode, entry.response?.protocolCode?.code,
             entry.response?.headers, entry.response?.body, entry.response?.bodyDecrypted,
@@ -62,8 +76,25 @@ data class ProtocolHistoryRecord(
 
 object ProtocolHeaderCodec {
     private val json = Json
-    fun encode(headers: Map<String, String>): String = JsonObject(headers.mapValues { JsonPrimitive(it.value) }).toString()
-    fun decode(encoded: String): Map<String, String> = json.parseToJsonElement(encoded).jsonObject.mapValues { it.value.jsonPrimitive.content }
+
+    /** 编码为有序数组格式 `[{"name":"...","value":"..."},...]`，保留重复项和顺序。 */
+    fun encodeEntries(entries: List<ProtocolHeader>): String =
+        json.encodeToString(kotlinx.serialization.builtins.ListSerializer(ProtocolHeader.serializer()), entries)
+
+    fun decodeEntries(encoded: String): List<ProtocolHeader> =
+        json.decodeFromString(kotlinx.serialization.builtins.ListSerializer(ProtocolHeader.serializer()), encoded)
+
+    /** 兼容旧 Map 格式：先尝试数组格式，失败时回退到旧 JSON object 格式。 */
+    fun encode(headers: Map<String, String>): String = encodeEntries(ProtocolHeaders.fromMap(headers))
+
+    fun decode(encoded: String): Map<String, String> {
+        val trimmed = encoded.trimStart()
+        if (trimmed.startsWith("[")) {
+            return ProtocolHeaders.toMap(decodeEntries(encoded))
+        }
+        // 旧格式：JSON object {"name":"value",...}
+        return json.parseToJsonElement(encoded).jsonObject.mapValues { it.value.jsonPrimitive.content }
+    }
 }
 
 class ProtocolHistoryStore(context: Context) {
