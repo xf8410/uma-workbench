@@ -3,6 +3,9 @@ package com.uma.workbench.protocol
 /** One HTTP header occurrence. Order, original name casing and duplicate names are retained. */
 data class ProtocolHeader(val name: String, val value: String)
 
+/** Compatibility lookup returns the last matching value; iteration still retains every entry. */
+operator fun List<ProtocolHeader>.get(name: String): String? = lastOrNull { it.name.equals(name, ignoreCase = true) }?.value
+
 object ProtocolHeaders {
     fun fromMap(headers: Map<String, String>): List<ProtocolHeader> = headers.entries.map { ProtocolHeader(it.key, it.value) }
     fun compatibilityMap(entries: List<ProtocolHeader>): Map<String, String> = linkedMapOf<String, String>().apply { entries.forEach { put(it.name, it.value) } }
