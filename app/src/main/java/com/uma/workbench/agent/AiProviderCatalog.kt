@@ -3,7 +3,7 @@ package com.uma.workbench.agent
 import java.util.UUID
 import kotlinx.serialization.Serializable
 
-@Serializable data class AiApiCredential(val id:String=UUID.randomUUID().toString(),val label:String,val secret:String,val enabled:Boolean=true){val masked:String get()=if(secret.length<=8)"••••••••" else secret.take(4)+"••••••••"+secret.takeLast(4)}
+@Serializable data class AiApiCredential(val id:String=UUID.randomUUID().toString(),val label:String,val secret:String,val enabled:Boolean=true)
 @Serializable data class AiProviderProfile(
  val id:String=UUID.randomUUID().toString(),val name:String,val baseUrl:String,val chatPath:String="/chat/completions",val modelsPath:String="/models",val credentials:List<AiApiCredential> = emptyList(),val selectedCredentialId:String?=null,val models:List<String> = emptyList(),val protocol:CustomAiApiProtocol=CustomAiApiProtocol(),val headersJson:String=AiRequestHeaders.DEFAULT_JSON
 ){
