@@ -31,10 +31,10 @@ class SubAgentCoordinatorTest {
             emit(AiStreamEvent.TextDelta("report:${request.messages.last().completeContent}"))
             emit(AiStreamEvent.Completed)
         } }
-        var requestNumber = 0
+        val requestNumber = AtomicInteger(0)
         val coordinator = SubAgentCoordinator(
             SubAgentLoopFactory { ReadonlyAgentLoop(provider, ReadonlyAgentToolExecutor(source)) },
-            requestIdFactory = { "child-${++requestNumber}" }
+            requestIdFactory = { "child-${requestNumber.incrementAndGet()}" }
         )
         val parent = AiGenerationRequest(
             "parent",
@@ -104,7 +104,7 @@ class SubAgentCoordinatorTest {
     }
 
     @Test(expected = CancellationException::class)
-    fun parentCancellationPropagatesInsteadOfBecomingChildFailure() = runBlocking {
+    fun parentCancellationPropagatesInsteadOfBecomingChildFailure(): Unit = runBlocking {
         val provider = AiStreamingProvider { flow { throw CancellationException("stop") } }
         SubAgentCoordinator(
             SubAgentLoopFactory { ReadonlyAgentLoop(provider, ReadonlyAgentToolExecutor(source)) }
@@ -112,10 +112,11 @@ class SubAgentCoordinatorTest {
             AiGenerationRequest("p", emptyList(), "m"),
             listOf(SubAgentTask("one", "task"))
         )
+        Unit
     }
 
     @Test(expected = IllegalArgumentException::class)
-    fun rejectsDispatchAboveTaskBudget() = runBlocking {
+    fun rejectsDispatchAboveTaskBudget(): Unit = runBlocking {
         val provider = AiStreamingProvider { flow { emit(AiStreamEvent.TextDelta("ok")); emit(AiStreamEvent.Completed) } }
         SubAgentCoordinator(
             SubAgentLoopFactory { ReadonlyAgentLoop(provider, ReadonlyAgentToolExecutor(source)) },
@@ -124,5 +125,6 @@ class SubAgentCoordinatorTest {
             AiGenerationRequest("p", emptyList(), "m"),
             listOf(SubAgentTask("one", "1"), SubAgentTask("two", "2"))
         )
+        Unit
     }
 }
