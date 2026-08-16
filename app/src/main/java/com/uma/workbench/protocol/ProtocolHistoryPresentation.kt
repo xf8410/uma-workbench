@@ -1,9 +1,20 @@
 package com.uma.workbench.protocol
 
-/** Lossless text projection used by the protocol-history UI and copy actions. */
+/** Lossless text projection used by protocol-history UI, Agent reads, exports and copy actions. */
 object ProtocolHistoryPresentation {
     fun headers(headers: Map<String, String>?): String = headers.orEmpty().entries
         .joinToString("\n") { (name, value) -> "$name: $value" }
+
+    /**
+     * Complete stored-record projection. Every stored field is emitted without filtering,
+     * substitution, hashing, masking or body shortening.
+     */
+    fun completeRecord(record: ProtocolHistoryRecord): String = detail(
+        ProtocolHistoryDetail(
+            record = record,
+            diagnosis = record.protocolCode?.let(ProtocolDiagnostics::diagnose)
+        )
+    )
 
     fun detail(detail: ProtocolHistoryDetail): String = buildString {
         val record = detail.record
