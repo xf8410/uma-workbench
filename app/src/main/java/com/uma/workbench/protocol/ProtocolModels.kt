@@ -1,12 +1,26 @@
 package com.uma.workbench.protocol
 
-/** 安卓端育成协议核心数据模型 */
+/** One HTTP header occurrence. Order, original name casing and duplicate names are retained. */
+data class ProtocolHeader(val name: String, val value: String)
 
+object ProtocolHeaders {
+    fun fromMap(headers: Map<String, String>): List<ProtocolHeader> =
+        headers.entries.map { ProtocolHeader(it.key, it.value) }
+
+    /** Compatibility view only. Lossless code must use the entry list. */
+    fun compatibilityMap(entries: List<ProtocolHeader>): Map<String, String> = linkedMapOf<String, String>().apply {
+        entries.forEach { put(it.name, it.value) }
+    }
+
+    fun text(entries: List<ProtocolHeader>): String = entries.joinToString("\n") { "${it.name}: ${it.value}" }
+}
+
+/** 安卓端育成协议核心数据模型 */
 data class GameSession(
     val sid: String,
     val viewerId: Long,
     val accountToken: String?,
-    val inheritCode: String?,       // 引继码
+    val inheritCode: String?,
     val appVer: String,
     val resVer: String?,
     val resVerHash: String?,
@@ -15,14 +29,13 @@ data class GameSession(
     val platformOsVersion: String?,
     val capturedAt: Long,
     val source: SessionSource,
-    val bound: Boolean,             // SID 是否已绑定 viewer_id
+    val bound: Boolean,
     val expired: Boolean = false,
     val platform: String = "Android"
 )
 
 enum class SessionSource { GAME_DUMP, MANUAL_INPUT, HLPATCH }
 
-/** 育成协议状态码 */
 enum class ProtocolStatusCode(val code: Int, val label: String, val description: String) {
     OK(200, "成功", "请求正常处理"),
     RESOURCE_INSUFFICIENT(205, "资源不够", "资源不足"),
@@ -39,7 +52,6 @@ enum class ProtocolStatusCode(val code: Int, val label: String, val description:
     }
 }
 
-/** 安卓端育成协议关键端点 */
 enum class GameEndpoint(val path: String, val label: String, val description: String) {
     BOOT("boot", "启动握手", "匿名会话，viewer_id=0"),
     LOGIN("tool/login", "登录", "引继码+账号token换SID"),
@@ -47,11 +59,11 @@ enum class GameEndpoint(val path: String, val label: String, val description: St
     LOAD_INDEX("load/index", "进入家园", "加载主页数据"),
     PRE_SIGNUP("tool/pre_signup", "预注册", "viewer_id=0"),
     SIGNUP("tool/signup", "注册", "引继码绑定"),
-    ;
+    UNKNOWN("", "未知端点", "保留原始端点字符串");
 
-    /** 完整登录链顺序 */
     companion object {
         val LOGIN_CHAIN = listOf(LOGIN, START_SESSION, LOAD_INDEX)
+        fun fromPath(path: String): GameEndpoint = entries.firstOrNull { it != UNKNOWN && it.path == path } ?: UNKNOWN
     }
 }
 
@@ -62,7 +74,9 @@ data class GameRequest(
     val body: String,
     val bodyEncrypted: Boolean = false,
     val headers: Map<String, String> = emptyMap(),
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val rawEndpoint: String = endpoint.path,
+    val headerEntries: List<ProtocolHeader> = ProtocolHeaders.fromMap(headers)
 )
 
 data class GameResponse(
@@ -73,7 +87,8 @@ data class GameResponse(
     val bodyDecrypted: String?,
     val latencyMs: Long,
     val timestamp: Long,
-    val success: Boolean
+    val success: Boolean,
+    val headerEntries: List<ProtocolHeader> = ProtocolHeaders.fromMap(headers)
 )
 
 data class ProtocolLogEntry(
