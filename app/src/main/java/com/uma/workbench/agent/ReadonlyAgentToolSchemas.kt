@@ -8,12 +8,13 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
 object ReadonlyAgentToolSchemas {
-    /** Tools visible to children. Deliberately excludes delegation to prevent recursive fan-out. */
-    val childReadOnly: JsonArray = buildJsonArray { addReadOnlyTools() }
+    /** Children stay workspace-local and cannot recursively delegate or consume GitHub API quota. */
+    val childReadOnly: JsonArray = buildJsonArray { addWorkspaceReadOnlyTools() }
 
-    /** Tools visible to the root Agent. */
+    /** GitHub tools are initially visible only to the root Agent. */
     val openAiCompatible: JsonArray = buildJsonArray {
-        addReadOnlyTools()
+        addWorkspaceReadOnlyTools()
+        addGitHubReadOnlyTools()
         add(buildJsonObject {
             put("type", "function")
             put("function", buildJsonObject {
@@ -47,7 +48,7 @@ object ReadonlyAgentToolSchemas {
         })
     }
 
-    private fun JsonArrayBuilder.addReadOnlyTools() {
+    private fun JsonArrayBuilder.addWorkspaceReadOnlyTools() {
         function("list_workspace_files", "列出当前工作区允许读取的文件")
         function("read_current_file", "读取当前活动文件；较大结果返回 resultId 和下一 offset，可用 read_tool_result 继续完整读取")
         function("read_file", "按工作区 URI 读取文件", strings = listOf("uri"), required = listOf("uri"))
@@ -61,7 +62,55 @@ object ReadonlyAgentToolSchemas {
         function("read_tool_result", "按 resultId、offset、limit 精确续读先前工具的完整本地结果，直到 complete=true", strings = listOf("resultId"), integers = listOf("offset", "limit"), required = listOf("resultId", "offset"))
     }
 
-    private fun JsonArrayBuilder.function(name: String, description: String, strings: List<String> = emptyList(), integers: List<String> = emptyList(), booleans: List<String> = emptyList(), required: List<String> = emptyList()) {
+    private fun JsonArrayBuilder.addGitHubReadOnlyTools() {
+        function(
+            "github_list_repositories",
+            "列出当前登录 GitHub 账号可访问的仓库；page 从 1 开始",
+            positiveIntegers = listOf("page")
+        )
+        function(
+            "github_get_repository",
+            "读取一个 GitHub 仓库的元数据",
+            strings = listOf("owner", "name"),
+            required = listOf("owner", "name")
+        )
+        function(
+            "github_list_branches",
+            "列出一个 GitHub 仓库的分支，最多 100 条",
+            strings = listOf("owner", "name"),
+            required = listOf("owner", "name")
+        )
+        function(
+            "github_read_file",
+            "读取 GitHub 仓库中的文件或目录；path 可为空字符串表示根目录",
+            strings = listOf("owner", "name", "ref", "path"),
+            required = listOf("owner", "name", "ref", "path")
+        )
+        function(
+            "github_list_commits",
+            "分页列出 GitHub 仓库指定 ref 的提交，单次最多 50 条",
+            strings = listOf("owner", "name", "ref"),
+            positiveIntegers = listOf("page"),
+            required = listOf("owner", "name", "ref")
+        )
+        function(
+            "github_get_workflow_runs",
+            "分页读取 GitHub Actions 工作流运行，单次最多 20 条",
+            strings = listOf("owner", "name"),
+            positiveIntegers = listOf("page"),
+            required = listOf("owner", "name")
+        )
+    }
+
+    private fun JsonArrayBuilder.function(
+        name: String,
+        description: String,
+        strings: List<String> = emptyList(),
+        integers: List<String> = emptyList(),
+        positiveIntegers: List<String> = emptyList(),
+        booleans: List<String> = emptyList(),
+        required: List<String> = emptyList()
+    ) {
         add(buildJsonObject {
             put("type", "function")
             put("function", buildJsonObject {
@@ -70,7 +119,12 @@ object ReadonlyAgentToolSchemas {
                     put("type", "object"); put("additionalProperties", false)
                     put("properties", buildJsonObject {
                         strings.forEach { put(it, buildJsonObject { put("type", "string") }) }
-                        integers.forEach { property -> put(property, buildJsonObject { put("type", "integer"); put("minimum", if (property == "limit") 1 else 0) }) }
+                        integers.forEach { property -> put(property, buildJsonObject {
+                            put("type", "integer"); put("minimum", if (property == "limit") 1 else 0)
+                        }) }
+                        positiveIntegers.forEach { property -> put(property, buildJsonObject {
+                            put("type", "integer"); put("minimum", 1)
+                        }) }
                         booleans.forEach { put(it, buildJsonObject { put("type", "boolean") }) }
                     })
                     put("required", buildJsonArray { required.forEach { add(JsonPrimitive(it)) } })
