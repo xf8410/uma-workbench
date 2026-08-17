@@ -20,6 +20,8 @@ class WorkbenchRepository(private val database: AppDatabase) {
         database.conversations().upsert(ConversationEntity(id, title, now, now)); return id
     }
     suspend fun createConversation(conv: ConversationEntity) = database.conversations().upsert(conv)
+    suspend fun deleteConversations(workspaceId: String, ids: Collection<String>) =
+        database.deleteConversationsAtomically(workspaceId, ids)
     suspend fun nextMessageSequence(conversationId: String): Long = database.messages().nextSequence(conversationId)
     suspend fun addMessage(msg: MessageEntity) = database.messages().insert(msg)
 
