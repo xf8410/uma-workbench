@@ -14,10 +14,12 @@ object ReadonlyAgentToolPolicy {
     val allowedNames: Set<String> = linkedSetOf(
         "list_workspace_files", "read_current_file", "read_file", "read_file_range",
         "search_workspace", "search_symbol", "read_il2cpp_class", "read_protocol_record",
-        "read_so_snapshot", "read_doc", "read_tool_result", "delegate_subagents"
+        "read_so_snapshot", "read_doc", "read_tool_result", "delegate_subagents",
+        "github_list_repositories", "github_get_repository", "github_list_branches",
+        "github_read_file", "github_list_commits", "github_get_workflow_runs"
     )
     val toolsAllowingEmptyArguments: Set<String> = setOf(
-        "list_workspace_files", "read_current_file", "read_so_snapshot"
+        "list_workspace_files", "read_current_file", "read_so_snapshot", "github_list_repositories"
     )
     private val json = Json { ignoreUnknownKeys = false }
 
