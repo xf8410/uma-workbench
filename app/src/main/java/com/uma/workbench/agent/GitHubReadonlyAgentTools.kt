@@ -9,6 +9,7 @@ import com.uma.workbench.github.GitHubRepositorySummary
 import com.uma.workbench.github.GitCommitSummary
 import com.uma.workbench.github.GitRef
 import com.uma.workbench.github.WorkflowRunSummary
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -28,12 +29,12 @@ internal object GitHubReadonlyToolRenderer {
     const val MAX_DIRECTORY_ENTRIES = 500
 
     fun repositories(page: Int, values: List<GitHubRepositorySummary>) = buildJsonObject {
-        put("page", page.coerceAtLeast(1)); put("repositories", buildJsonArray { values.forEach { repository ->
-            add(repository(repository))
+        put("page", page.coerceAtLeast(1)); put("repositories", buildJsonArray { values.forEach { value ->
+            add(repositoryObject(value))
         } })
     }.toString()
 
-    fun repository(value: GitHubRepositorySummary) = repository(value).toString()
+    fun repository(value: GitHubRepositorySummary): String = repositoryObject(value).toString()
 
     fun branches(values: List<GitRef>) = buildJsonObject {
         put("branches", buildJsonArray { values.take(100).forEach { branch ->
@@ -70,7 +71,7 @@ internal object GitHubReadonlyToolRenderer {
         } })
     }.toString()
 
-    private fun repository(repository: GitHubRepositorySummary) = buildJsonObject {
+    private fun repositoryObject(repository: GitHubRepositorySummary): JsonObject = buildJsonObject {
         put("owner", repository.owner); put("name", repository.name)
         put("default_branch", repository.defaultBranch); put("private", repository.isPrivate)
         put("fork", repository.isFork); put("archived", repository.isArchived)
