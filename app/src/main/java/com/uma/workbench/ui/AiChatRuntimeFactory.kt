@@ -1,6 +1,7 @@
 package com.uma.workbench.ui
 
 import com.uma.workbench.WorkbenchApplication
+import com.uma.workbench.agent.ActiveWorkspaceDocumentBridge
 import com.uma.workbench.agent.AiStreamingProvider
 import com.uma.workbench.agent.AndroidReadonlyAgentToolDataSource
 import com.uma.workbench.agent.FileAgentToolResultStore
