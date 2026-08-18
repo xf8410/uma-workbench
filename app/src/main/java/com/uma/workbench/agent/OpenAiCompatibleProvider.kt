@@ -1,5 +1,6 @@
 package com.uma.workbench.agent
 
+import com.uma.workbench.diagnostics.AiHttpException
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
@@ -11,7 +12,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -38,7 +38,7 @@ class CustomAiApiProvider(private val settings: () -> AiProviderSettings) : AiSt
             val status = connection.responseCode
             if (status !in 200..299) {
                 val completeError = connection.errorStream?.use { String(it.readBytes(), Charsets.UTF_8) }.orEmpty()
-                error("自定义 AI API HTTP $status\n$completeError")
+                throw AiHttpException(status, completeError)
             }
             BufferedReader(InputStreamReader(connection.inputStream, Charsets.UTF_8)).use { reader ->
                 while (true) {
