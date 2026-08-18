@@ -1,5 +1,6 @@
 package com.uma.workbench.agent
 
+import java.net.SocketException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -43,12 +44,16 @@ class AiGenerationControllerTest {
         assertTrue(state.usage!!.totalTokens > 0)
     }
 
-    @Test fun failureNeverLeavesStaleGeneratingState() = runTest {
-        val controller = AiGenerationController(this) { flow { throw IllegalStateException("complete provider failure") } }
+    @Test fun failureNeverLeavesStaleGeneratingStateOrExposesRawException() = runTest {
+        val raw = "Software caused connection abort"
+        val controller = AiGenerationController(this) { flow { emit(AiStreamEvent.TextDelta("已保存部分")); throw SocketException(raw) } }
         controller.send(request); advanceUntilIdle()
         val state = controller.state.value
         assertEquals(AiGenerationPhase.FAILED, state.phase); assertTrue(state.canSend); assertFalse(state.canInterrupt)
-        assertTrue(state.error!!.contains("complete provider failure")); assertNotNull(state.usage)
+        assertEquals("已保存部分", state.completeText)
+        assertTrue(state.error!!.contains("网络连接在回复过程中断开"))
+        assertTrue(state.error!!.contains("已收到的 5 个字符仍然保留"))
+        assertFalse(state.error!!.contains(raw)); assertFalse(state.error!!.contains("SocketException")); assertNotNull(state.usage)
     }
 
     @Test fun repeatedCumulativeUsageIsNotDoubleCounted() = runTest {
