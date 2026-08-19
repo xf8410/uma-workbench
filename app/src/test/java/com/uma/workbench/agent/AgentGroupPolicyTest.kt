@@ -1,30 +1,25 @@
 package com.uma.workbench.agent
 
-import kotlin.test.Test
-import kotlin.test.assertFailsWith
-import kotlin.test.assertTrue
+import org.junit.Assert.assertTrue
+import org.junit.Test
 
 class AgentGroupPolicyTest {
-    @Test
+    @Test(expected = IllegalArgumentException::class)
     fun managerMustBeAMember() {
-        assertFailsWith<IllegalArgumentException> {
-            AgentGroupPolicy.validate(
-                managerAgentId = "manager",
-                memberAgentIds = listOf("researcher"),
-                turnPolicy = AgentGroupPolicy.MANAGER_SELECTS
-            )
-        }
+        AgentGroupPolicy.validate(
+            managerAgentId = "manager",
+            memberAgentIds = listOf("researcher"),
+            turnPolicy = AgentGroupPolicy.MANAGER_SELECTS
+        )
     }
 
-    @Test
+    @Test(expected = IllegalArgumentException::class)
     fun duplicateMembersAreRejected() {
-        assertFailsWith<IllegalArgumentException> {
-            AgentGroupPolicy.validate(
-                managerAgentId = "manager",
-                memberAgentIds = listOf("manager", "researcher", "researcher"),
-                turnPolicy = AgentGroupPolicy.FREE_SPEAKING
-            )
-        }
+        AgentGroupPolicy.validate(
+            managerAgentId = "manager",
+            memberAgentIds = listOf("manager", "researcher", "researcher"),
+            turnPolicy = AgentGroupPolicy.FREE_SPEAKING
+        )
     }
 
     @Test
