@@ -6,7 +6,7 @@ fun interface AgentGroupMessageWriter {
         senderType: String,
         senderAgentId: String?,
         content: String,
-        toolCallsJson: String? = null
+        toolCallsJson: String?
     ): AgentGroupMessageEntity
 }
 
