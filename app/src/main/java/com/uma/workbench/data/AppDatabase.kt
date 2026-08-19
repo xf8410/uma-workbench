@@ -128,14 +128,27 @@ import kotlinx.coroutines.flow.Flow
     AuditSourceEntity::class, EvidenceEntity::class, ArtifactEntity::class, KnowledgeEntryEntity::class,
     SearchHistoryEntity::class, HlpatchSnapshotEntity::class, SyncQueueEntity::class, GitHubRepositoryEntity::class,
     Il2CppSectionEntity::class, Il2CppSectionChunkEntity::class, Il2CppStringFragmentEntity::class,
-    ArchiveEntryEntity::class, SessionRecordEntity::class, SessionFieldEntity::class
-], version = 7, exportSchema = false)
+    ArchiveEntryEntity::class, SessionRecordEntity::class, SessionFieldEntity::class,
+    GenerationRunEntity::class, OutboundQueueEntity::class, ConversationBranchEntity::class,
+    ConversationCheckpointEntity::class, MessageBodyEntity::class, MessageBlockEntity::class,
+    ToolResultDedupEntity::class, EvidenceArtifactEntity::class, EvidenceChunkEntity::class,
+    EndpointCatalogEntity::class, KnowledgeEntryV2Entity::class, KnowledgeEvidenceRefEntity::class,
+    ContextBudgetEntity::class, LspServerEntity::class, LspDiagnosticEntity::class
+], version = 8, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun workspaces(): WorkspaceDao; abstract fun projects(): ProjectDao; abstract fun recentFiles(): RecentFileDao; abstract fun openTabs(): OpenTabDao
     abstract fun conversations(): ConversationDao; abstract fun messages(): MessageDao; abstract fun workItems(): WorkItemDao
     abstract fun auditSources(): AuditSourceDao; abstract fun evidence(): EvidenceDao; abstract fun artifacts(): ArtifactDao; abstract fun knowledge(): KnowledgeDao
     abstract fun searchHistory(): SearchHistoryDao; abstract fun hlpatchSnapshots(): HlpatchSnapshotDao; abstract fun syncQueue(): SyncQueueDao; abstract fun githubRepositories(): GitHubRepositoryDao
     abstract fun il2CppIndex(): Il2CppIndexDao; abstract fun archiveIndex(): ArchiveIndexDao; abstract fun sessionIndex(): SessionIndexDao
+    abstract fun generationRuns(): GenerationRunDao; abstract fun outboundQueue(): OutboundQueueDao
+    abstract fun conversationBranches(): ConversationBranchDao; abstract fun conversationCheckpoints(): ConversationCheckpointDao
+    abstract fun messageBodies(): MessageBodyDao; abstract fun messageBlocks(): MessageBlockDao
+    abstract fun toolResultDedup(): ToolResultDedupDao; abstract fun evidenceArtifacts(): EvidenceArtifactDao
+    abstract fun evidenceChunks(): EvidenceChunkDao; abstract fun endpointCatalog(): EndpointCatalogDao
+    abstract fun knowledgeEntriesV2(): KnowledgeEntryV2Dao; abstract fun knowledgeEvidenceRefs(): KnowledgeEvidenceRefDao
+    abstract fun contextBudgets(): ContextBudgetDao; abstract fun pagedMessages(): PagedMessageDao
+    abstract fun lspServers(): LspServerDao; abstract fun lspDiagnostics(): LspDiagnosticDao
 
     companion object {
         private val MIGRATION_6_7 = migration(6, 7,
@@ -168,6 +181,6 @@ abstract class AppDatabase : RoomDatabase() {
         )
         private fun migration(from: Int, to: Int, vararg sql: String) = object : Migration(from, to) { override fun migrate(db: SupportSQLiteDatabase) { sql.forEach(db::execSQL) } }
         @Volatile private var instance: AppDatabase? = null
-        fun get(context: Context): AppDatabase = instance ?: synchronized(this) { instance ?: Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "uma-workbench.db").addMigrations(MIGRATION_6_7).fallbackToDestructiveMigration().build().also { instance = it } }
+        fun get(context: Context): AppDatabase = instance ?: synchronized(this) { instance ?: Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "uma-workbench.db").addMigrations(MIGRATION_6_7, MIGRATION_7_8).fallbackToDestructiveMigration().build().also { instance = it } }
     }
 }

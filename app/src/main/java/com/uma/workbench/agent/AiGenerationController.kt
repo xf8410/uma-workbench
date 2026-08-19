@@ -13,7 +13,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
 
 data class AiTokenUsage(val inputTokens: Long = 0, val outputTokens: Long = 0, val totalTokens: Long = inputTokens + outputTokens, val estimated: Boolean = false)
-enum class AiGenerationPhase { IDLE, GENERATING, COMPLETED, CANCELLED, FAILED }
+enum class AiGenerationPhase { IDLE, GENERATING, WAITING_FOR_NETWORK, RESUMING, COMPLETED, CANCELLED, FAILED }
 data class AiGenerationState(
     val phase: AiGenerationPhase = AiGenerationPhase.IDLE,
     val requestId: String? = null,
@@ -22,13 +22,17 @@ data class AiGenerationState(
     val model: String? = null,
     /** User-safe Chinese text only; raw exception details belong in diagnostics. */
     val error: String? = null,
-    val toolCalls: List<AiToolCall> = emptyList()
+    val toolCalls: List<AiToolCall> = emptyList(),
+    val partialCharacterCount: Int = 0,
+    val lastEventId: String? = null
 ) {
-    val canSend: Boolean get() = phase != AiGenerationPhase.GENERATING
-    val canInterrupt: Boolean get() = phase == AiGenerationPhase.GENERATING
+    val canSend: Boolean get() = phase != AiGenerationPhase.GENERATING && phase != AiGenerationPhase.WAITING_FOR_NETWORK && phase != AiGenerationPhase.RESUMING
+    val canInterrupt: Boolean get() = phase == AiGenerationPhase.GENERATING || phase == AiGenerationPhase.WAITING_FOR_NETWORK || phase == AiGenerationPhase.RESUMING
     val statusLabel: String get() = when (phase) {
         AiGenerationPhase.IDLE -> "就绪"
         AiGenerationPhase.GENERATING -> "生成中"
+        AiGenerationPhase.WAITING_FOR_NETWORK -> "等待网络恢复"
+        AiGenerationPhase.RESUMING -> "正在恢复"
         AiGenerationPhase.COMPLETED -> "已完成"
         AiGenerationPhase.CANCELLED -> "已停止"
         AiGenerationPhase.FAILED -> "生成失败"
@@ -80,10 +84,20 @@ class AiGenerationController(private val scope: CoroutineScope, private val prov
             var terminal = AiGenerationPhase.COMPLETED
             var terminalError: String? = null
             val toolAccumulator = AiToolCallAccumulator()
+            val textBuilder = StringBuilder()
+            var lastFlush = 0L
+            val flushIntervalMs = 80L
             try {
                 provider.stream(request).collect { event ->
                     when (event) {
-                        is AiStreamEvent.TextDelta -> _state.value = _state.value.copy(completeText = _state.value.completeText + event.completeDelta)
+                        is AiStreamEvent.TextDelta -> {
+                            textBuilder.append(event.completeDelta)
+                            val now = System.currentTimeMillis()
+                            if (now - lastFlush >= flushIntervalMs || event.completeDelta.isEmpty()) {
+                                _state.value = _state.value.copy(completeText = textBuilder.toString(), partialCharacterCount = textBuilder.length)
+                                lastFlush = now
+                            }
+                        }
                         is AiStreamEvent.Usage -> _state.value = _state.value.copy(usage = mergeUsage(_state.value.usage, event.usage))
                         is AiStreamEvent.Model -> _state.value = _state.value.copy(model = event.model)
                         is AiStreamEvent.ToolCallDelta -> {
@@ -93,13 +107,16 @@ class AiGenerationController(private val scope: CoroutineScope, private val prov
                         AiStreamEvent.Completed -> terminal = AiGenerationPhase.COMPLETED
                     }
                 }
+                _state.value = _state.value.copy(completeText = textBuilder.toString(), partialCharacterCount = textBuilder.length)
                 if (toolAccumulator.snapshot().isNotEmpty()) _state.value = _state.value.copy(toolCalls = toolAccumulator.validatedSnapshot())
             } catch (cancelled: CancellationException) {
                 terminal = AiGenerationPhase.CANCELLED
+                _state.value = _state.value.copy(completeText = textBuilder.toString(), partialCharacterCount = textBuilder.length)
                 throw cancelled
             } catch (error: Throwable) {
                 terminal = AiGenerationPhase.FAILED
-                terminalError = WorkbenchErrorMapper.map(error, _state.value.completeText.length).userFacing.displayText
+                terminalError = WorkbenchErrorMapper.map(error, textBuilder.length).userFacing.displayText
+                _state.value = _state.value.copy(completeText = textBuilder.toString(), partialCharacterCount = textBuilder.length)
             } finally {
                 val usage = _state.value.usage ?: AiTokenEstimator.estimate(request, _state.value.completeText)
                 _state.value = _state.value.copy(phase = terminal, usage = usage, error = terminalError)

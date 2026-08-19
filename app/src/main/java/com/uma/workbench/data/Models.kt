@@ -19,10 +19,10 @@ data class OpenTabEntity(@PrimaryKey val id: String, val workspaceId: String, va
 
 // ── 对话 (已有，保留) ──
 @Entity(tableName = "conversations")
-data class ConversationEntity(@PrimaryKey val id: String, val title: String, val createdAt: Long, val updatedAt: Long, val status: String = "ACTIVE", val workspaceId: String? = null, val agentMode: String = "ASK")
+data class ConversationEntity(@PrimaryKey val id: String, val title: String, val createdAt: Long, val updatedAt: Long, val status: String = "ACTIVE", val workspaceId: String? = null, val agentMode: String = "ASK", val lastMessagePreview: String? = null, val messageCount: Int = 0, val tokenTotal: Long = 0)
 
 @Entity(tableName = "messages", indices = [Index(value = ["conversationId", "sequence"], unique = true), Index(value = ["requestId"], unique = true)])
-data class MessageEntity(@PrimaryKey val id: String, val conversationId: String, val runId: String?, val requestId: String?, val sequence: Long, val role: String, val content: String, val status: String = "COMPLETE", val createdAt: Long, val toolCallsJson: String? = null, val tokenCount: Int? = null, val modelUsed: String? = null)
+data class MessageEntity(@PrimaryKey val id: String, val conversationId: String, val runId: String?, val requestId: String?, val sequence: Long, val role: String, val content: String, val status: String = "SENT", val createdAt: Long, val toolCallsJson: String? = null, val tokenCount: Int? = null, val modelUsed: String? = null)
 
 // ── 任务 (已有，保留) ──
 @Entity(tableName = "work_items", indices = [Index("parentId"), Index("sourceId")])
