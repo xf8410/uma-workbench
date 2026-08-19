@@ -97,7 +97,7 @@ object WorkbenchErrorMapper {
     }
 
     private fun presentation(code: WorkbenchErrorCode, partial: Int, id: String): UserFacingError {
-        val saved = if (partial > 0) "已收到的 $partial 个字符仍然保留。" else "当前输入和对话记录没有丢失。"
+        val saved = if (partial > 0) "已收到的 ${"%,d".format(partial)} 个字符仍然保留。" else "当前输入和对话记录没有丢失。"
         return when (code) {
             WorkbenchErrorCode.NETWORK_OFFLINE -> user(code, "当前设备没有可用网络", "软件暂时无法连接 AI 服务。", saved, "连接网络后继续。", true, id)
             WorkbenchErrorCode.NETWORK_DNS_FAILURE -> user(code, "无法找到 AI 服务器地址", "域名解析失败，可能是网络、DNS 或服务地址配置问题。", saved, "检查网络和服务地址后重试。", true, id)
