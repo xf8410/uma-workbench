@@ -1,5 +1,6 @@
 package com.uma.workbench.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.uma.workbench.agent.AgentGroupPolicy
+import com.uma.workbench.agent.AgentGroupMessageEntity
 import com.uma.workbench.agent.AgentPartnerViewModel
 import com.uma.workbench.agent.AgentProfileEntity
 
@@ -36,42 +38,53 @@ fun AgentPartnerPanel(
     viewModel.setWorkspace(workspaceId)
     val profiles by viewModel.profiles.collectAsStateWithLifecycle()
     val groups by viewModel.groups.collectAsStateWithLifecycle()
+    val selectedGroup by viewModel.selectedGroup.collectAsStateWithLifecycle()
+    val messages by viewModel.groupMessages.collectAsStateWithLifecycle()
     var creatingProfile by remember { mutableStateOf(false) }
     var creatingGroup by remember { mutableStateOf(false) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text("关闭") } },
-        title = { Text("伙伴与群聊") },
-        text = {
-            Column(Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("伙伴 ${profiles.size} · 群聊 ${groups.size}")
-                    Row {
-                        TextButton(onClick = { creatingProfile = true }) { Text("新伙伴") }
-                        TextButton(onClick = { creatingGroup = true }, enabled = profiles.isNotEmpty()) { Text("新群聊") }
+    if (selectedGroup != null) {
+        AgentGroupChatDialog(
+            groupName = selectedGroup!!.name,
+            messages = messages,
+            onSend = viewModel::sendGroupMessage,
+            onDismiss = { viewModel.selectGroup(null) }
+        )
+    } else {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            confirmButton = { TextButton(onClick = onDismiss) { Text("关闭") } },
+            title = { Text("伙伴与群聊") },
+            text = {
+                Column(Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("伙伴 ${profiles.size} · 群聊 ${groups.size}")
+                        Row {
+                            TextButton(onClick = { creatingProfile = true }) { Text("新伙伴") }
+                            TextButton(onClick = { creatingGroup = true }, enabled = profiles.isNotEmpty()) { Text("新群聊") }
+                        }
                     }
-                }
-                LazyColumn {
-                    items(profiles, key = { it.id }) { profile ->
-                        Text(
-                            "${profile.name} · ${if (profile.enabled) "启用" else "停用"}",
-                            modifier = Modifier.padding(4.dp)
-                        )
-                    }
-                    items(groups, key = { it.id }) { group ->
-                        Text(
-                            "群：${group.name} · 管理员 ${group.managerAgentId}",
-                            modifier = Modifier.padding(4.dp)
-                        )
+                    LazyColumn {
+                        items(profiles, key = { it.id }) { profile ->
+                            Text(
+                                "${profile.name} · ${if (profile.enabled) "启用" else "停用"}",
+                                modifier = Modifier.padding(4.dp)
+                            )
+                        }
+                        items(groups, key = { it.id }) { group ->
+                            Text(
+                                "群：${group.name} · 管理员 ${group.managerAgentId}",
+                                modifier = Modifier.fillMaxWidth().clickable { viewModel.selectGroup(group.id) }.padding(8.dp)
+                            )
+                        }
                     }
                 }
             }
-        }
-    )
+        )
+    }
 
     if (creatingProfile) {
         CreateAgentProfileDialog(
@@ -95,6 +108,46 @@ fun AgentPartnerPanel(
 }
 
 @Composable
+private fun AgentGroupChatDialog(
+    groupName: String,
+    messages: List<AgentGroupMessageEntity>,
+    onSend: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var input by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onDismiss) { Text("返回") } },
+        title = { Text(groupName) },
+        text = {
+            Column(Modifier.fillMaxWidth()) {
+                LazyColumn(Modifier.fillMaxWidth()) {
+                    if (messages.isEmpty()) item { Text("暂无群消息") }
+                    items(messages, key = { it.id }) { message ->
+                        Text(
+                            "${message.senderType}: ${message.content}",
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+                    }
+                }
+                Row(Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        value = input,
+                        onValueChange = { input = it },
+                        label = { Text("发送群消息") },
+                        modifier = Modifier.weight(1f)
+                    )
+                    Button(
+                        onClick = { onSend(input); input = "" },
+                        enabled = input.isNotBlank()
+                    ) { Text("发送") }
+                }
+            }
+        }
+    )
+}
+
+@Composable
 private fun CreateAgentProfileDialog(
     onDismiss: () -> Unit,
     onCreate: (String, String, String, String?) -> Unit
@@ -106,10 +159,7 @@ private fun CreateAgentProfileDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            Button(
-                onClick = { onCreate(name, identity, soul, user.ifBlank { null }) },
-                enabled = name.isNotBlank()
-            ) { Text("创建") }
+            Button(onClick = { onCreate(name, identity, soul, user.ifBlank { null }) }, enabled = name.isNotBlank()) { Text("创建") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
         title = { Text("新建伙伴") },
@@ -138,10 +188,7 @@ private fun CreateAgentGroupDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            Button(
-                onClick = { onCreate(name, managerId, selectedIds.toList(), policy) },
-                enabled = name.isNotBlank() && managerId in selectedIds
-            ) { Text("创建") }
+            Button(onClick = { onCreate(name, managerId, selectedIds.toList(), policy) }, enabled = name.isNotBlank() && managerId in selectedIds) { Text("创建") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
         title = { Text("新建群聊") },
@@ -155,9 +202,7 @@ private fun CreateAgentGroupDialog(
                             checked = profile.id in selectedIds,
                             onCheckedChange = { checked ->
                                 selectedIds = if (checked) selectedIds + profile.id else selectedIds - profile.id
-                                if (profile.id == managerId && !checked) {
-                                    managerId = selectedIds.firstOrNull() ?: ""
-                                }
+                                if (profile.id == managerId && !checked) managerId = selectedIds.firstOrNull() ?: ""
                             }
                         )
                         Text(profile.name, modifier = Modifier.padding(top = 12.dp))
@@ -166,22 +211,9 @@ private fun CreateAgentGroupDialog(
                 Row {
                     Text("发言策略：$policy", modifier = Modifier.padding(top = 12.dp))
                     TextButton(onClick = { policyExpanded = true }) { Text("选择") }
-                    DropdownMenu(
-                        expanded = policyExpanded,
-                        onDismissRequest = { policyExpanded = false }
-                    ) {
-                        listOf(
-                            AgentGroupPolicy.MANAGER_SELECTS,
-                            AgentGroupPolicy.FREE_SPEAKING,
-                            AgentGroupPolicy.USER_DIRECTED
-                        ).forEach { option ->
-                            DropdownMenuItem(
-                                text = { Text(option) },
-                                onClick = {
-                                    policy = option
-                                    policyExpanded = false
-                                }
-                            )
+                    DropdownMenu(expanded = policyExpanded, onDismissRequest = { policyExpanded = false }) {
+                        listOf(AgentGroupPolicy.MANAGER_SELECTS, AgentGroupPolicy.FREE_SPEAKING, AgentGroupPolicy.USER_DIRECTED).forEach { option ->
+                            DropdownMenuItem(text = { Text(option) }, onClick = { policy = option; policyExpanded = false })
                         }
                     }
                 }
