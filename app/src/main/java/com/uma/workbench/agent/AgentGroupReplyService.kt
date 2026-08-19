@@ -1,8 +1,18 @@
 package com.uma.workbench.agent
 
-/** Android-independent application service for the group reply execution boundary. */
+fun interface AgentGroupMessageWriter {
+    suspend fun append(
+        groupId: String,
+        senderType: String,
+        senderAgentId: String?,
+        content: String,
+        toolCallsJson: String? = null
+    ): AgentGroupMessageEntity
+}
+
+/** Application service for the group reply execution boundary. */
 class AgentGroupReplyService(
-    private val store: AgentPartnerStore,
+    private val writer: AgentGroupMessageWriter,
     private val coordinator: AgentGroupReplyCoordinator
 ) {
     suspend fun executeAndPersist(
@@ -18,7 +28,7 @@ class AgentGroupReplyService(
         val context = AgentGroupPolicy.buildContextInstructions(group, profiles, importedHistory)
         val replies = coordinator.execute(decision, profiles, userMessage, context)
         replies.forEach { reply ->
-            store.appendGroupMessage(
+            writer.append(
                 groupId = group.id,
                 senderType = "AGENT",
                 senderAgentId = reply.agentId,
