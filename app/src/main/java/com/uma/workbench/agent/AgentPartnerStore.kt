@@ -10,6 +10,10 @@ class AgentPartnerStore(private val database: AgentPartnerDatabase) {
 
     fun observeDiaries(agentId: String) = database.diaries().observe(agentId)
 
+    fun observeGroupMessages(groupId: String) = database.groups().observeMessages(groupId)
+
+    suspend fun groupMembers(groupId: String) = database.groups().members(groupId)
+
     suspend fun saveProfile(profile: AgentProfileEntity) {
         require(profile.name.isNotBlank()) { "伙伴名称不能为空" }
         database.profiles().upsert(profile)
@@ -43,6 +47,31 @@ class AgentPartnerStore(private val database: AgentPartnerDatabase) {
         )
         database.diaries().upsert(entry)
         return entry
+    }
+
+    suspend fun appendGroupMessage(
+        groupId: String,
+        senderType: String,
+        senderAgentId: String?,
+        content: String,
+        replyToMessageId: String? = null,
+        toolCallsJson: String? = null
+    ): AgentGroupMessageEntity {
+        require(content.isNotBlank()) { "群消息不能为空" }
+        require(senderType in setOf("USER", "AGENT", "SYSTEM")) { "未知的群消息发送者类型：$senderType" }
+        val message = AgentGroupMessageEntity(
+            id = UUID.randomUUID().toString(),
+            groupId = groupId,
+            sequence = database.groups().nextMessageSequence(groupId),
+            senderType = senderType,
+            senderAgentId = senderAgentId,
+            content = content,
+            replyToMessageId = replyToMessageId,
+            toolCallsJson = toolCallsJson,
+            createdAt = System.currentTimeMillis()
+        )
+        database.groups().insertMessage(message)
+        return message
     }
 
     suspend fun createGroup(
