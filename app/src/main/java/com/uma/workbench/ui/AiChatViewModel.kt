@@ -48,4 +48,9 @@ class AiChatViewModel(application:Application):AndroidViewModel(application){
  fun clearSelection(){_selection.value=_selection.value.clearSelection()}
  fun exitSelection(){_selection.value=_selection.value.exit()}
  fun deleteSelectedConversations()=viewModelScope.launch{val wsId=activeDocument.value?.workspaceId;val ids=_selection.value.selectedIds;if(ids.isEmpty()){_selection.value=_selection.value.copy(error="没有选中的对话");return@launch};_selection.value=_selection.value.copy(deleting=true,error=null);try{if(wsId!=null){repository.deleteConversations(wsId,ids)};_selection.value=ConversationSelectionState();if(_conversationId.value in ids){_conversationId.value=null}}catch(e:Throwable){_selection.value=_selection.value.copy(deleting=false,error=WorkbenchErrorMapper.map(e,0).userFacing.displayText)}}
+
+ private val PAGE_SIZE=50;private var _oldestLoadedSequence=Long.MAX_VALUE;private val _hasMoreMessages=MutableStateFlow(true);val hasMoreMessages:StateFlow<Boolean> =_hasMoreMessages.asStateFlow()
+ fun loadOlderMessages(){val convId=_conversationId.value?:return;viewModelScope.launch{val older=app.database.pagedMessages().messagesBefore(convId,_oldestLoadedSequence,PAGE_SIZE);if(older.isEmpty()){_hasMoreMessages.value=false;return};_oldestLoadedSequence=older.minOf{it.sequence};_hasMoreMessages.value=older.size>=PAGE_SIZE}}
+ fun resetPaging(){_oldestLoadedSequence=Long.MAX_VALUE;_hasMoreMessages.value=true}
+ fun loadRecentMessages(){val convId=_conversationId.value?:return;viewModelScope.launch{val recent=app.database.pagedMessages().recentMessages(convId,PAGE_SIZE);if(recent.isNotEmpty())_oldestLoadedSequence=recent.minOf{it.sequence};_hasMoreMessages.value=recent.size>=PAGE_SIZE}}
 }

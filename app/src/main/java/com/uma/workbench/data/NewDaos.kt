@@ -79,12 +79,14 @@ import kotlinx.coroutines.flow.Flow
     @Query("SELECT * FROM knowledge_entries_v2 WHERE workspaceId = :wsId AND supersededBy IS NULL ORDER BY updatedAt DESC") fun observe(wsId: String): Flow<List<KnowledgeEntryV2Entity>>
     @Query("SELECT * FROM knowledge_entries_v2 WHERE id = :id LIMIT 1") suspend fun get(id: String): KnowledgeEntryV2Entity?
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(entry: KnowledgeEntryV2Entity)
+    @Query("DELETE FROM knowledge_entries_v2 WHERE id = :id") suspend fun delete(id: String)
     @Query("UPDATE knowledge_entries_v2 SET supersededBy = :byId, updatedAt = :now WHERE id = :id") suspend fun supersede(id: String, byId: String, now: Long)
     @Query("SELECT * FROM knowledge_entries_v2 WHERE workspaceId = :wsId AND (topic LIKE '%' || :q || '%' OR conclusion LIKE '%' || :q || '%') AND supersededBy IS NULL ORDER BY updatedAt DESC LIMIT 50") suspend fun search(wsId: String, q: String): List<KnowledgeEntryV2Entity>
 }
 
 @Dao interface KnowledgeEvidenceRefDao {
     @Query("SELECT * FROM knowledge_evidence_refs WHERE knowledgeEntryId = :entryId") suspend fun refs(entryId: String): List<KnowledgeEvidenceRefEntity>
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(ref: KnowledgeEvidenceRefEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertAll(refs: List<KnowledgeEvidenceRefEntity>)
     @Query("DELETE FROM knowledge_evidence_refs WHERE knowledgeEntryId = :entryId") suspend fun deleteForEntry(entryId: String)
 }
