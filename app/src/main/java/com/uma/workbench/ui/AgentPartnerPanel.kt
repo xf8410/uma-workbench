@@ -10,10 +10,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -29,7 +27,6 @@ import com.uma.workbench.agent.AgentGroupPolicy
 import com.uma.workbench.agent.AgentPartnerViewModel
 import com.uma.workbench.agent.AgentProfileEntity
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AgentPartnerPanel(
     viewModel: AgentPartnerViewModel,
@@ -60,10 +57,16 @@ fun AgentPartnerPanel(
                 }
                 LazyColumn {
                     items(profiles, key = { it.id }) { profile ->
-                        Text("${profile.name} · ${if (profile.enabled) "启用" else "停用"}", modifier = Modifier.padding(4.dp))
+                        Text(
+                            "${profile.name} · ${if (profile.enabled) "启用" else "停用"}",
+                            modifier = Modifier.padding(4.dp)
+                        )
                     }
                     items(groups, key = { it.id }) { group ->
-                        Text("群：${group.name} · 管理员 ${group.managerAgentId}", modifier = Modifier.padding(4.dp))
+                        Text(
+                            "群：${group.name} · 管理员 ${group.managerAgentId}",
+                            modifier = Modifier.padding(4.dp)
+                        )
                     }
                 }
             }
@@ -103,7 +106,10 @@ private fun CreateAgentProfileDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            Button(onClick = { onCreate(name, identity, soul, user.ifBlank { null }) }, enabled = name.isNotBlank()) { Text("创建") }
+            Button(
+                onClick = { onCreate(name, identity, soul, user.ifBlank { null }) },
+                enabled = name.isNotBlank()
+            ) { Text("创建") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
         title = { Text("新建伙伴") },
@@ -118,7 +124,6 @@ private fun CreateAgentProfileDialog(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CreateAgentGroupDialog(
     profiles: List<AgentProfileEntity>,
@@ -150,25 +155,18 @@ private fun CreateAgentGroupDialog(
                             checked = profile.id in selectedIds,
                             onCheckedChange = { checked ->
                                 selectedIds = if (checked) selectedIds + profile.id else selectedIds - profile.id
-                                if (profile.id == managerId && !checked) managerId = selectedIds.firstOrNull() ?: ""
+                                if (profile.id == managerId && !checked) {
+                                    managerId = selectedIds.firstOrNull() ?: ""
+                                }
                             }
                         )
                         Text(profile.name, modifier = Modifier.padding(top = 12.dp))
                     }
                 }
-                ExposedDropdownMenuBox(
-                    expanded = policyExpanded,
-                    onExpandedChange = { policyExpanded = it }
-                ) {
-                    OutlinedTextField(
-                        value = policy,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("发言策略") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(policyExpanded) },
-                        modifier = Modifier.menuAnchor()
-                    )
-                    androidx.compose.material3.ExposedDropdownMenu(
+                Row {
+                    Text("发言策略：$policy", modifier = Modifier.padding(top = 12.dp))
+                    TextButton(onClick = { policyExpanded = true }) { Text("选择") }
+                    DropdownMenu(
                         expanded = policyExpanded,
                         onDismissRequest = { policyExpanded = false }
                     ) {
@@ -179,7 +177,10 @@ private fun CreateAgentGroupDialog(
                         ).forEach { option ->
                             DropdownMenuItem(
                                 text = { Text(option) },
-                                onClick = { policy = option; policyExpanded = false }
+                                onClick = {
+                                    policy = option
+                                    policyExpanded = false
+                                }
                             )
                         }
                     }
