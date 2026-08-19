@@ -18,87 +18,39 @@ class AgentPartnerViewModel(application: Application) : AndroidViewModel(applica
     private val workspaceId = MutableStateFlow<String?>(null)
     private val selectedGroupId = MutableStateFlow<String?>(null)
 
-    val profiles: StateFlow<List<AgentProfileEntity>> = workspaceId
-        .flatMapLatest { store.observeProfiles(it) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
-    val groups: StateFlow<List<AgentGroupEntity>> = workspaceId
-        .flatMapLatest { store.observeGroups(it) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
-    val selectedGroup: StateFlow<AgentGroupEntity?> = selectedGroupId
-        .flatMapLatest { id -> if (id == null) flowOf(null) else groupsFlow(id) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
-
-    val groupMessages: StateFlow<List<AgentGroupMessageEntity>> = selectedGroupId
-        .flatMapLatest { id -> if (id == null) flowOf(emptyList()) else store.observeGroupMessages(id) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
+    val profiles: StateFlow<List<AgentProfileEntity>> = workspaceId.flatMapLatest { store.observeProfiles(it) }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val groups: StateFlow<List<AgentGroupEntity>> = workspaceId.flatMapLatest { store.observeGroups(it) }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val selectedGroup: StateFlow<AgentGroupEntity?> = selectedGroupId.flatMapLatest { id -> if (id == null) flowOf(null) else flowOf(groups.value.firstOrNull { it.id == id }) }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    val groupMessages: StateFlow<List<AgentGroupMessageEntity>> = selectedGroupId.flatMapLatest { id -> if (id == null) flowOf(emptyList()) else store.observeGroupMessages(id) }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message
 
-    fun setWorkspace(id: String) {
-        if (workspaceId.value != id) {
-            workspaceId.value = id
-            selectedGroupId.value = null
-        }
-    }
-
-    fun selectGroup(id: String?) {
-        selectedGroupId.value = id
-    }
-
-    fun clearMessage() {
-        _message.value = null
-    }
+    fun setWorkspace(id: String) { if (workspaceId.value != id) { workspaceId.value = id; selectedGroupId.value = null } }
+    fun selectGroup(id: String?) { selectedGroupId.value = id }
+    fun clearMessage() { _message.value = null }
 
     fun createProfile(name: String, identity: String, soul: String, user: String?) = viewModelScope.launch {
         runCatching {
             val now = System.currentTimeMillis()
-            store.saveProfile(
-                AgentProfileEntity(
-                    id = UUID.randomUUID().toString(),
-                    workspaceId = workspaceId.value,
-                    name = name.trim(),
-                    avatarUri = null,
-                    identityMarkdown = identity,
-                    soulMarkdown = soul,
-                    userMarkdown = user,
-                    systemPrompt = null,
-                    createdAt = now,
-                    updatedAt = now
-                )
-            )
-        }.onSuccess { _message.value = "伙伴已创建" }
-            .onFailure { _message.value = it.message ?: "创建伙伴失败" }
+            store.saveProfile(AgentProfileEntity(UUID.randomUUID().toString(), workspaceId.value, name.trim(), null, identity, soul, user, null, true, now, now))
+        }.onSuccess { _message.value = "伙伴已创建" }.onFailure { _message.value = it.message ?: "创建伙伴失败" }
     }
 
     fun createGroup(name: String, managerId: String, memberIds: List<String>, policy: String) = viewModelScope.launch {
-        runCatching {
-            store.createGroup(
-                workspaceId = workspaceId.value,
-                name = name.trim(),
-                description = null,
-                managerAgentId = managerId,
-                memberAgentIds = memberIds,
-                turnPolicy = policy
-            )
-        }.onSuccess { _message.value = "群聊已创建" }
-            .onFailure { _message.value = it.message ?: "创建群聊失败" }
+        runCatching { store.createGroup(workspaceId.value, name.trim(), null, managerId, memberIds, policy) }
+            .onSuccess { _message.value = "群聊已创建" }.onFailure { _message.value = it.message ?: "创建群聊失败" }
     }
 
-    fun sendGroupMessage(content: String) = viewModelScope.launch {
-        val groupId = selectedGroupId.value ?: run {
-            _message.value = "请先选择群聊"
-            return@launch
-        }
+    fun sendGroupMessage(content: String, requestedAgentIds: List<String> = emptyList()) = viewModelScope.launch {
+        val groupId = selectedGroupId.value ?: run { _message.value = "请先选择群聊"; return@launch }
         runCatching {
+            val group = groups.value.firstOrNull { it.id == groupId } ?: error("找不到当前群聊")
+            val members = store.groupMembers(groupId)
             store.appendGroupMessage(groupId, "USER", null, content.trim())
-        }.onSuccess { _message.value = null }
-            .onFailure { _message.value = it.message ?: "发送群消息失败" }
-    }
-
-    private fun groupsFlow(id: String) = kotlinx.coroutines.flow.flow {
-        emit(groups.value.firstOrNull { it.id == id })
+            val decision = AgentGroupTurnPlanner.plan(group, members, content, requestedAgentIds)
+            if (decision.selectedAgentIds.isNotEmpty()) {
+                store.appendGroupMessage(groupId, "SYSTEM", null, "管理员已选择：${decision.selectedAgentIds.joinToString()}（${decision.reason}）")
+            }
+        }.onSuccess { _message.value = null }.onFailure { _message.value = it.message ?: "发送群消息失败" }
     }
 }
