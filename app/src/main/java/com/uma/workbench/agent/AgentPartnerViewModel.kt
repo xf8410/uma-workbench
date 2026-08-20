@@ -128,7 +128,7 @@ class AgentPartnerViewModel(application: Application) : AndroidViewModel(applica
                     _generationState.value = AgentGenerationState.Idle
                     _message.value = "Agent 回复失败：${e.message ?: "未知错误"}"
                 }
-            }.onFailure { e ->
+            }.onFailure {
                 _generationState.value = AgentGenerationState.Idle
                 _message.value = it.message ?: "发送群消息失败"
             }
