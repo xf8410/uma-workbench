@@ -98,8 +98,8 @@ class AgentPartnerViewModel(application: Application) : AndroidViewModel(applica
                     override suspend fun onRunning(messageId: String, requestId: String, model: String) {
                         store.updateMessageRunning(messageId, requestId, model)
                     }
-                    override suspend fun onCompleted(messageId: String, content: String, roundsCount: Int, usageJson: String?) {
-                        store.updateMessageCompleted(messageId, content, roundsCount, usageJson)
+                    override suspend fun onCompleted(messageId: String, content: String, roundsCount: Int, usageJson: String?, toolCallsJson: String?) {
+                        store.updateMessageCompleted(messageId, content, roundsCount, usageJson, toolCallsJson)
                     }
                     override suspend fun onFailed(messageId: String, error: String) {
                         store.updateMessageFailed(messageId, error)

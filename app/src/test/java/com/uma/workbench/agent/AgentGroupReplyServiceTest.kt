@@ -11,7 +11,7 @@ class AgentGroupReplyServiceTest {
         val writer = AgentGroupMessageWriter { groupId, senderType, senderAgentId, content, toolCallsJson ->
             AgentGroupMessageEntity("m${messages.size}", groupId, messages.size.toLong(), senderType, senderAgentId, content, null, toolCallsJson, 1L).also { messages += it }
         }
-        val service = AgentGroupReplyService(writer, AgentGroupReplyCoordinator(AgentGroupReplyRunner { _, _ -> AgentGroupReplyRunnerResult("有证据的答复", "req-1", "test-model", 1, null) }))
+        val service = AgentGroupReplyService(writer, AgentGroupReplyCoordinator(AgentGroupReplyRunner { _, _ -> AgentGroupReplyRunnerResult("有证据的答复", "req-1", "test-model", 1, null, null) }))
         service.executeAndPersist(
             group(),
             members(),

@@ -29,9 +29,12 @@ class AgentPartnerStore(private val database: AgentPartnerDatabase) {
         database.groups().updateMessageRunning(messageId, "RUNNING", requestId, model, System.currentTimeMillis())
     }
 
-    suspend fun updateMessageCompleted(messageId: String, content: String, roundsCount: Int, usageJson: String?) {
+    suspend fun updateMessageCompleted(messageId: String, content: String, roundsCount: Int, usageJson: String?, toolCallsJson: String? = null) {
         database.groups().updateMessageContent(messageId, content)
         database.groups().updateMessageResult(messageId, "COMPLETED", System.currentTimeMillis(), null, roundsCount, usageJson)
+        if (toolCallsJson != null) {
+            database.groups().updateMessageToolCalls(messageId, toolCallsJson)
+        }
     }
 
     suspend fun updateMessageFailed(messageId: String, error: String) {

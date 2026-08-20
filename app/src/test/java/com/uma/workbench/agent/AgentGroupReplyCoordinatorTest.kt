@@ -12,7 +12,7 @@ class AgentGroupReplyCoordinatorTest {
         val profiles = listOf(profile("a"), profile("b"), profile("c"))
         val runner = AgentGroupReplyRunner { profile, prompt ->
             seen += "${profile.id}:$prompt"
-            AgentGroupReplyRunnerResult("答复-${profile.id}", "req-${profile.id}", "test-model", 1, null)
+            AgentGroupReplyRunnerResult("答复-${profile.id}", "req-${profile.id}", "test-model", 1, null, null)
         }
         val replies = AgentGroupReplyCoordinator(runner, maxRepliesPerTurn = 2).execute(
             decision = AgentGroupTurnDecision("g", "a", listOf("a", "b", "c"), "bounded"),

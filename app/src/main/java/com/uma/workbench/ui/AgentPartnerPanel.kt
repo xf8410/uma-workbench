@@ -264,6 +264,67 @@ private fun GroupMessageItem(
                 }
             }
         }
+        // Tool calls display
+        if (!message.toolCallsJson.isNullOrBlank()) {
+            var expanded by remember { mutableStateOf(false) }
+            val toolCalls = parseToolCalls(message.toolCallsJson)
+            if (toolCalls.isNotEmpty()) {
+                TextButton(
+                    onClick = { expanded = !expanded },
+                    modifier = Modifier.padding(start = 20.dp, top = 2.dp)
+                ) {
+                    Text(
+                        (if (expanded) "▼ " else "▶ ") + "工具调用 " + toolCalls.size + " 次",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                    )
+                }
+                if (expanded) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 20.dp, top = 2.dp, end = 8.dp)
+                            .background(
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                                shape = MaterialTheme.shapes.small
+                            )
+                            .padding(8.dp)
+                    ) {
+                        toolCalls.forEachIndexed { index, (tool, status, args) ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 2.dp)
+                            ) {
+                                Text(
+                                    (index + 1).toString() + ". ",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                )
+                                Text(
+                                    tool,
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    if (status == "ok") "✅" else "❌",
+                                    fontSize = 11.sp
+                                )
+                            }
+                            if (args.isNotBlank()) {
+                                Text(
+                                    args,
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                                    modifier = Modifier.padding(start = 16.dp, bottom = 4.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
         // Status-specific UI
         when (message.status) {
             "FAILED" -> {

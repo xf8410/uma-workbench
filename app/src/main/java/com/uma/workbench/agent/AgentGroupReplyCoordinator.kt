@@ -14,13 +14,14 @@ data class AgentGroupReplyRunnerResult(
     val requestId: String,
     val model: String?,
     val roundsCount: Int,
-    val usageJson: String?
+    val usageJson: String?,
+    val toolCallsJson: String? = null
 )
 
 /** Callbacks for persisting per-agent message execution status. */
 interface AgentGroupMessagePersister {
     suspend fun onRunning(messageId: String, requestId: String, model: String)
-    suspend fun onCompleted(messageId: String, content: String, roundsCount: Int, usageJson: String?)
+    suspend fun onCompleted(messageId: String, content: String, roundsCount: Int, usageJson: String?, toolCallsJson: String?)
     suspend fun onFailed(messageId: String, error: String)
     suspend fun onCancelled(messageId: String)
 }
@@ -66,7 +67,7 @@ class AgentGroupReplyCoordinator(
                     }.fold(
                         onSuccess = { result ->
                             messageId?.let { mid ->
-                                persister?.onCompleted(mid, result.content, result.roundsCount, result.usageJson)
+                                persister?.onCompleted(mid, result.content, result.roundsCount, result.usageJson, result.toolCallsJson)
                             }
                             AgentGroupReply(profile.id, result.content)
                         },

@@ -47,6 +47,9 @@ interface AgentGroupDao {
     suspend fun updateMessageStatus(messageId: String, status: String)
     @Query("UPDATE agent_group_messages SET content = :content WHERE id = :messageId")
     suspend fun updateMessageContent(messageId: String, content: String)
+    @Query("UPDATE agent_group_messages SET toolCallsJson = :toolCallsJson WHERE id = :messageId")
+    suspend fun updateMessageToolCalls(messageId: String, toolCallsJson: String?)
+
     @Query("SELECT * FROM agent_group_messages WHERE groupId = :groupId ORDER BY sequence DESC LIMIT :limit")
     suspend fun getRecentMessages(groupId: String, limit: Int = 20): List<AgentGroupMessageEntity>
 }

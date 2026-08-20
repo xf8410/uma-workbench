@@ -48,13 +48,39 @@ class AgentGroupReplyRunnerImpl(
             append(",\"total\":${result.usage.totalTokens}")
             append(",\"estimated\":${result.usage.estimated}}")
         }
+        val toolCallsJson = buildToolCallsJson(result.rounds)
         return AgentGroupReplyRunnerResult(
             content = result.completeAnswer,
             requestId = result.requestId,
             model = result.model,
             roundsCount = result.rounds.size,
-            usageJson = usageJson
+            usageJson = usageJson,
+            toolCallsJson = toolCallsJson
         )
+    }
+
+    private fun buildToolCallsJson(rounds: List<ReadonlyAgentRound>): String? {
+        val entries = mutableListOf<String>()
+        for (round in rounds) {
+            val pairs = round.toolCalls.zip(round.toolOutcomes)
+            for ((call, outcome) in pairs) {
+                val status = when (outcome) {
+                    is AgentToolOutcome.Success -> "ok"
+                    is AgentToolOutcome.Failure -> "fail"
+                }
+                val argsRaw = call.completeArgumentsJson
+                val argsTruncated = if (argsRaw.length > 300) argsRaw.substring(0, 300) + "..." else argsRaw
+                val escapedArgs = argsTruncated.replace("\\", "\\\\").replace("\"", "\\\"")
+                val errorPart = if (outcome is AgentToolOutcome.Failure) {
+                    val errMsg = outcome.failure.completeError.let {
+                        if (it.length > 200) it.substring(0, 200) + "..." else it
+                    }.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")
+                    ",\"error\":\"$errMsg\""
+                } else ""
+                entries.add("{\"tool\":\"${call.name}\",\"status\":\"$status\",\"args\":\"$escapedArgs\"$errorPart}")
+            }
+        }
+        return if (entries.isEmpty()) null else "[${entries.joinToString(",")}]"
     }
 
     private fun extractUserQuestion(prompt: String): String {

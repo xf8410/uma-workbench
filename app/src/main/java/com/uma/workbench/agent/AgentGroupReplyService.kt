@@ -68,18 +68,10 @@ class AgentGroupReplyService(
             throw ce
         }
 
-        // Persist final status
-        if (persister != null) {
-            replies.forEach { reply ->
-                val messageId = messageIds[reply.agentId] ?: return@forEach
-                if (reply.failed) {
-                    persister.onFailed(messageId, reply.content)
-                } else {
-                    persister.onCompleted(messageId, reply.content, 0, null)
-                }
-            }
-        } else {
-            // Fallback: write replies directly via writer (no status tracking)
+        // When persister is provided, Coordinator already called onCompleted/onFailed
+        // with full metadata (content, roundsCount, usageJson, toolCallsJson)
+        // Fallback: when no persister, write replies directly via writer
+        if (persister == null) {
             replies.filter { !it.failed }.forEach { reply ->
                 writer.append(
                     groupId = group.id,
