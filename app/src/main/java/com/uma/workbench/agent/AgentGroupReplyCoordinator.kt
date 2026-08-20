@@ -25,7 +25,8 @@ class AgentGroupReplyCoordinator(
         decision: AgentGroupTurnDecision,
         profiles: List<AgentProfileEntity>,
         userMessage: String,
-        groupContext: String
+        groupContext: String,
+        historyMessages: List<AgentGroupMessageEntity> = emptyList()
     ): List<AgentGroupReply> {
         require(userMessage.isNotBlank()) { "群消息不能为空" }
         val selected = decision.selectedAgentIds
@@ -36,7 +37,7 @@ class AgentGroupReplyCoordinator(
             selected.map { profile ->
                 async {
                     runCatching {
-                        runner.run(profile, buildPrompt(profile, decision, userMessage, groupContext))
+                        runner.run(profile, buildPrompt(profile, decision, userMessage, groupContext, historyMessages))
                     }.fold(
                         onSuccess = { AgentGroupReply(profile.id, it) },
                         onFailure = { AgentGroupReply(profile.id, "Agent 执行失败：${it.message ?: "未知错误"}", true) }
@@ -50,13 +51,25 @@ class AgentGroupReplyCoordinator(
         profile: AgentProfileEntity,
         decision: AgentGroupTurnDecision,
         userMessage: String,
-        groupContext: String
+        groupContext: String,
+        historyMessages: List<AgentGroupMessageEntity> = emptyList()
     ): String = buildString {
         appendLine("你是群聊伙伴：${profile.name}。")
         appendLine("只读回答，不执行写入、发布、删除或凭据操作。")
         appendLine("结论必须基于实际证据；无法验证时明确说明。")
         appendLine("本轮管理员选择理由：${decision.reason}")
         appendLine(groupContext)
+        if (historyMessages.isNotEmpty()) {
+            appendLine("[group_history]")
+            historyMessages.takeLast(10).forEach { msg ->
+                val sender = when (msg.senderType) {
+                    "USER" -> "用户"
+                    "AGENT" -> msg.senderAgentId ?: "Agent"
+                    else -> "系统"
+                }
+                appendLine("$sender: ${msg.content.take(500)}")
+            }
+        }
         appendLine("[user_message]")
         appendLine(userMessage)
     }

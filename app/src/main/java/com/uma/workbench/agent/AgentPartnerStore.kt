@@ -22,6 +22,25 @@ class AgentPartnerStore(private val database: AgentPartnerDatabase) {
         val message = AgentGroupMessageEntity(UUID.randomUUID().toString(), groupId, database.groups().nextMessageSequence(groupId), senderType, senderAgentId, content, replyToMessageId, toolCallsJson, System.currentTimeMillis())
         database.groups().insertMessage(message); return message
     }
+    suspend fun recentGroupMessages(groupId: String, limit: Int = 20): List<AgentGroupMessageEntity> =
+        database.groups().getRecentMessages(groupId, limit)
+
+    suspend fun updateMessageRunning(messageId: String, requestId: String, model: String) {
+        database.groups().updateMessageRunning(messageId, "RUNNING", requestId, model, System.currentTimeMillis())
+    }
+
+    suspend fun updateMessageCompleted(messageId: String, roundsCount: Int, usageJson: String?) {
+        database.groups().updateMessageResult(messageId, "COMPLETED", System.currentTimeMillis(), null, roundsCount, usageJson)
+    }
+
+    suspend fun updateMessageFailed(messageId: String, error: String) {
+        database.groups().updateMessageResult(messageId, "FAILED", System.currentTimeMillis(), error, 0, null)
+    }
+
+    suspend fun updateMessageCancelled(messageId: String) {
+        database.groups().updateMessageStatus(messageId, "CANCELLED")
+    }
+
     suspend fun createGroup(workspaceId: String?, name: String, description: String?, managerAgentId: String, memberAgentIds: List<String>, turnPolicy: String = AgentGroupPolicy.MANAGER_SELECTS, groupPrompt: String? = null, history: List<AgentGroupHistoryImport> = emptyList()): AgentGroupEntity {
         require(name.isNotBlank()) { "群名称不能为空" }; AgentGroupPolicy.validate(managerAgentId, memberAgentIds, turnPolicy)
         memberAgentIds.forEach { agentId -> require(database.profiles().get(agentId) != null) { "找不到群成员伙伴：$agentId" } }

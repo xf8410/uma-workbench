@@ -64,7 +64,15 @@ data class AgentGroupMessageEntity(
     val content: String,
     val replyToMessageId: String?,
     val toolCallsJson: String?,
-    val createdAt: Long
+    val createdAt: Long,
+    val status: String = "COMPLETED",
+    val requestId: String? = null,
+    val model: String? = null,
+    val startedAt: Long? = null,
+    val completedAt: Long? = null,
+    val errorMessage: String? = null,
+    val roundsCount: Int = 0,
+    val usageJson: String? = null
 )
 
 @Entity(tableName = "agent_group_context_sources", indices = [Index("groupId"), Index("sourceConversationId")])

@@ -14,7 +14,7 @@ import androidx.room.RoomDatabase
         AgentGroupMessageEntity::class,
         AgentGroupContextSourceEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AgentPartnerDatabase : RoomDatabase() {
@@ -31,7 +31,7 @@ abstract class AgentPartnerDatabase : RoomDatabase() {
                 context.applicationContext,
                 AgentPartnerDatabase::class.java,
                 "uma-workbench-agents.db"
-            ).build().also { instance = it }
+            ).fallbackToDestructiveMigration().build().also { instance = it }
         }
     }
 }

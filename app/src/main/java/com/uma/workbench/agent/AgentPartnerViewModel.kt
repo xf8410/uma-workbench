@@ -11,10 +11,15 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.UUID
+import kotlinx.coroutines.flow.collect
 
 class AgentPartnerViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application as com.uma.workbench.WorkbenchApplication
     private val store = app.agentPartnerStore
+    private val catalogStore = AiProviderCatalogStore(application)
+    private val provider = CatalogAiStreamingProvider { catalogStore.load().defaultModel?.let { mid -> catalogStore.load().providers.firstOrNull { mid in it.models } } }
+    private val _replyingAgents = MutableStateFlow<Map<String, String>>(emptyMap())
+    val replyingAgents: StateFlow<Map<String, String>> = _replyingAgents.asStateFlow()
     private val workspaceId = MutableStateFlow<String?>(null)
     private val selectedGroupId = MutableStateFlow<String?>(null)
     val profiles: StateFlow<List<AgentProfileEntity>> = workspaceId.flatMapLatest { store.observeProfiles(it) }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -30,6 +35,57 @@ class AgentPartnerViewModel(application: Application) : AndroidViewModel(applica
     fun createGroup(name: String, managerId: String, memberIds: List<String>, policy: String) = viewModelScope.launch { runCatching { store.createGroup(workspaceId.value, name.trim(), null, managerId, memberIds, policy) }.onSuccess { _message.value = "群聊已创建" }.onFailure { _message.value = it.message ?: "创建群聊失败" } }
     fun sendGroupMessage(content: String, requestedAgentIds: List<String> = emptyList()) = viewModelScope.launch {
         val groupId = selectedGroupId.value ?: run { _message.value = "请先选择群聊"; return@launch }
-        runCatching { val group = groups.value.firstOrNull { it.id == groupId } ?: error("找不到当前群聊"); val members = store.groupMembers(groupId); store.appendGroupMessage(groupId, "USER", null, content.trim()); val decision = AgentGroupTurnPlanner.plan(group, members, content, requestedAgentIds); if (decision.selectedAgentIds.isNotEmpty()) store.appendGroupMessage(groupId, "SYSTEM", null, "管理员已选择：${decision.selectedAgentIds.joinToString()}（${decision.reason}）") }.onSuccess { _message.value = null }.onFailure { _message.value = it.message ?: "发送群消息失败" }
+        val group = groups.value.firstOrNull { it.id == groupId } ?: run { _message.value = "找不到当前群聊"; return@launch }
+        runCatching {
+            val members = store.groupMembers(groupId)
+            val profiles = this@AgentPartnerViewModel.profiles.value.filter { it.id in members.map { m -> m.agentId } }
+            val recentMessages = store.recentGroupMessages(groupId, 10)
+            store.appendGroupMessage(groupId, "USER", null, content.trim())
+            val decision = AgentGroupTurnPlanner.plan(group, members, content, requestedAgentIds)
+            if (decision.selectedAgentIds.isEmpty()) {
+                _message.value = "本轮无伙伴被选中发言"
+                return@runCatching
+            }
+            store.appendGroupMessage(groupId, "SYSTEM", null, "管理员已选择：${decision.selectedAgentIds.joinToString()}（${decision.reason}）")
+            val selectedProfiles = profiles.filter { it.id in decision.selectedAgentIds }
+            _replyingAgents.value = selectedProfiles.associate { it.id to "GENERATING" }
+            launch {
+                try {
+                    val runner = AgentGroupReplyRunnerImpl(
+                        provider = provider,
+                        source = AndroidReadonlyAgentToolDataSource(
+                            application, app.database, workspaceId.value ?: "",
+                            { ActiveWorkspaceDocumentBridge.document.value?.takeIf { it.workspaceId == (workspaceId.value ?: "") } }
+                        ),
+                        filesDir = application.filesDir
+                    )
+                    val coordinator = AgentGroupReplyCoordinator(runner)
+                    val writer = object : AgentGroupMessageWriter {
+                        override suspend fun append(groupId: String, senderType: String, senderAgentId: String?, content: String, toolCallsJson: String?): AgentGroupMessageEntity {
+                            return store.appendGroupMessage(groupId, senderType, senderAgentId, content, toolCallsJson = toolCallsJson)
+                        }
+                    }
+                    val service = AgentGroupReplyService(writer, coordinator)
+                    val replies = service.executeAndPersist(
+                        group = group,
+                        members = members,
+                        profiles = selectedProfiles,
+                        userMessage = content,
+                        requestedAgentIds = requestedAgentIds,
+                        recentMessages = recentMessages
+                    )
+                    replies.forEach { reply ->
+                        _replyingAgents.value = _replyingAgents.value - reply.agentId
+                    }
+                    _message.value = null
+                } catch (ce: kotlinx.coroutines.CancellationException) {
+                    _replyingAgents.value = emptyMap()
+                    throw ce
+                } catch (e: Throwable) {
+                    _replyingAgents.value = _replyingAgents.value.mapValues { "FAILED" }
+                    _message.value = "Agent 回复失败：${e.message ?: "未知错误"}"
+                }
+            }
+        }.onFailure { _message.value = it.message ?: "发送群消息失败" }
     }
 }
