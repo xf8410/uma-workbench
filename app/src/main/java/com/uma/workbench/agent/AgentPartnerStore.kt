@@ -49,6 +49,35 @@ class AgentPartnerStore(private val database: AgentPartnerDatabase) {
         database.groups().updateMessageStatus(messageId, status)
     }
 
+    suspend fun updateGroup(group: AgentGroupEntity) {
+        database.groups().upsert(group.copy(updatedAt = System.currentTimeMillis()))
+    }
+
+    suspend fun deleteGroup(groupId: String) {
+        database.groups().clearMembers(groupId)
+        database.groups().delete(groupId)
+    }
+
+    suspend fun addGroupMember(groupId: String, agentId: String, role: String = "MEMBER") {
+        require(database.profiles().get(agentId) != null) { "找不到伙伴：$agentId" }
+        val existing = database.groups().members(groupId)
+        require(existing.none { it.agentId == agentId }) { "该伙伴已是群成员" }
+        database.groups().upsertMembers(listOf(AgentGroupMemberEntity(groupId, agentId, role, "ON_DEMAND", System.currentTimeMillis())))
+    }
+
+    suspend fun removeGroupMember(groupId: String, agentId: String) {
+        val group = database.groups().get(groupId) ?: error("群聊不存在")
+        require(agentId != group.managerAgentId) { "不能移除群管理员，请先更换管理员" }
+        database.groups().removeMember(groupId, agentId)
+    }
+
+    suspend fun changeGroupManager(groupId: String, newManagerId: String) {
+        val group = database.groups().get(groupId) ?: error("群聊不存在")
+        val members = database.groups().members(groupId)
+        require(members.any { it.agentId == newManagerId }) { "新管理员必须是群成员" }
+        database.groups().upsert(group.copy(managerAgentId = newManagerId, updatedAt = System.currentTimeMillis()))
+    }
+
     suspend fun createGroup(workspaceId: String?, name: String, description: String?, managerAgentId: String, memberAgentIds: List<String>, turnPolicy: String = AgentGroupPolicy.MANAGER_SELECTS, groupPrompt: String? = null, history: List<AgentGroupHistoryImport> = emptyList()): AgentGroupEntity {
         require(name.isNotBlank()) { "群名称不能为空" }; AgentGroupPolicy.validate(managerAgentId, memberAgentIds, turnPolicy)
         memberAgentIds.forEach { agentId -> require(database.profiles().get(agentId) != null) { "找不到群成员伙伴：$agentId" } }

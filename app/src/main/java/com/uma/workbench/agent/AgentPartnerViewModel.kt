@@ -141,6 +141,50 @@ class AgentPartnerViewModel(application: Application) : AndroidViewModel(applica
         _generationState.value = AgentGenerationState.Idle
     }
 
+    fun updateGroupSettings(
+        groupId: String,
+        name: String,
+        description: String?,
+        groupPrompt: String?,
+        managerAgentId: String,
+        turnPolicy: String
+    ) = viewModelScope.launch {
+        runCatching {
+            val current = store.groupMembers(groupId)
+            AgentGroupPolicy.validate(managerAgentId, current.map { it.agentId }, turnPolicy)
+            val group = groups.value.firstOrNull { it.id == groupId } ?: error("群聊不存在")
+            store.updateGroup(group.copy(
+                name = name.trim(),
+                description = description?.takeIf { it.isNotBlank() },
+                groupPrompt = groupPrompt?.takeIf { it.isNotBlank() },
+                managerAgentId = managerAgentId,
+                turnPolicy = turnPolicy
+            ))
+        }.onSuccess { _message.value = "群设置已更新" }
+         .onFailure { _message.value = it.message ?: "更新群设置失败" }
+    }
+
+    fun addGroupMember(agentId: String) = viewModelScope.launch {
+        val groupId = selectedGroupId.value ?: return@launch
+        runCatching { store.addGroupMember(groupId, agentId) }
+            .onSuccess { _message.value = "成员已添加" }
+            .onFailure { _message.value = it.message ?: "添加成员失败" }
+    }
+
+    fun removeGroupMember(agentId: String) = viewModelScope.launch {
+        val groupId = selectedGroupId.value ?: return@launch
+        runCatching { store.removeGroupMember(groupId, agentId) }
+            .onSuccess { _message.value = "成员已移除" }
+            .onFailure { _message.value = it.message ?: "移除成员失败" }
+    }
+
+    fun deleteCurrentGroup() = viewModelScope.launch {
+        val groupId = selectedGroupId.value ?: return@launch
+        runCatching { store.deleteGroup(groupId) }
+            .onSuccess { selectedGroupId.value = null; _message.value = "群聊已删除" }
+            .onFailure { _message.value = it.message ?: "删除群聊失败" }
+    }
+
     fun retryFailedMessage(messageId: String) = viewModelScope.launch {
         val message = groupMessages.value.firstOrNull { it.id == messageId } ?: return@launch
         if (message.status != "FAILED") return@launch

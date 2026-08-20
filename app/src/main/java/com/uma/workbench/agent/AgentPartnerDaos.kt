@@ -34,6 +34,7 @@ interface AgentGroupDao {
     @Query("SELECT * FROM agent_group_members WHERE groupId = :groupId ORDER BY joinedAt") suspend fun members(groupId: String): List<AgentGroupMemberEntity>
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertMembers(members: List<AgentGroupMemberEntity>)
     @Query("DELETE FROM agent_group_members WHERE groupId = :groupId") suspend fun clearMembers(groupId: String)
+    @Query("DELETE FROM agent_group_members WHERE groupId = :groupId AND agentId = :agentId") suspend fun removeMember(groupId: String, agentId: String)
     @Query("SELECT COALESCE(MAX(sequence), 0) + 1 FROM agent_group_messages WHERE groupId = :groupId") suspend fun nextMessageSequence(groupId: String): Long
     @Query("SELECT * FROM agent_group_messages WHERE groupId = :groupId ORDER BY sequence ASC") fun observeMessages(groupId: String): Flow<List<AgentGroupMessageEntity>>
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertMessage(message: AgentGroupMessageEntity): Long
