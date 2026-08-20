@@ -176,3 +176,86 @@ class AuditWorker(context: Context, params: WorkerParameters) : UmaWorker(contex
 class SyncWorker(context: Context, params: WorkerParameters) : UmaWorker(context, params) {
     override suspend fun doWork(): Result = Result.success()
 }
+
+class DiaryWorker(context: Context, params: WorkerParameters) : UmaWorker(context, params) {
+    override suspend fun doWork(): Result {
+        val agentId = inputData.getString("agentId")
+        val db = com.uma.workbench.agent.AgentPartnerDatabase.get(applicationContext)
+        val store = com.uma.workbench.agent.AgentPartnerStore(db)
+        val catalogStore = com.uma.workbench.agent.AiProviderCatalogStore(applicationContext)
+        val catalog = catalogStore.load()
+        val profile = catalog.defaultModel?.let { mid ->
+            catalog.providers.firstOrNull { p -> mid in p.models }
+        }
+        if (profile == null) {
+            return Result.failure(workDataOf("error" to "未配置 AI 模型"))
+        }
+        val provider = com.uma.workbench.agent.CatalogAiStreamingProvider { profile }
+        val targetAgentIds = if (agentId != null) {
+            listOf(agentId)
+        } else {
+            db.profiles().getAllEnabled().map { it.id }
+        }
+        if (targetAgentIds.isEmpty()) {
+            return Result.success(workDataOf("note" to "没有启用的伙伴"))
+        }
+        var diaryCount = 0
+        val today = java.time.LocalDate.now()
+        targetAgentIds.forEach { targetAgentId ->
+            try {
+                val agentProfile = db.profiles().get(targetAgentId) ?: return@forEach
+                val memberEntries = db.groups().groupsContainingMember(targetAgentId)
+                if (memberEntries.isEmpty()) return@forEach
+                val conversationText = buildString {
+                    memberEntries.forEach { group ->
+                        val messages = db.groups().getRecentMessages(group.id, 20)
+                        if (messages.isNotEmpty()) {
+                            appendLine("## 群聊：${group.name}")
+                            messages.forEach { msg ->
+                                val sender = when (msg.senderType) {
+                                    "USER" -> "用户"
+                                    "AGENT" -> if (msg.senderAgentId == targetAgentId) agentProfile.name else (msg.senderAgentId ?: "Agent")
+                                    else -> "系统"
+                                }
+                                appendLine("$sender: ${msg.content.take(500)}")
+                            }
+                            appendLine()
+                        }
+                    }
+                }
+                if (conversationText.isBlank()) return@forEach
+                val prompt = com.uma.workbench.agent.AgentDiaryPromptBuilder.build(agentProfile, today, conversationText)
+                val request = com.uma.workbench.agent.AiGenerationRequest(
+                    requestId = java.util.UUID.randomUUID().toString(),
+                    messages = listOf(com.uma.workbench.agent.AiPromptMessage(role = "user", completeContent = prompt)),
+                    model = catalog.defaultModel,
+                    tools = null
+                )
+                var fullText = ""
+                provider.stream(request).collect { event ->
+                    when (event) {
+                        is com.uma.workbench.agent.AiStreamEvent.TextDelta -> fullText += event.completeDelta
+                        else -> {}
+                    }
+                }
+                if (fullText.isNotBlank()) {
+                    val title = "${agentProfile.name} 的日记 - $today"
+                    val content = fullText.trim()
+                    store.saveDiary(
+                        agentId = targetAgentId,
+                        date = today,
+                        title = title,
+                        content = content,
+                        sourceConversationId = null,
+                        sourceMessageRange = null,
+                        status = "DRAFT"
+                    )
+                    diaryCount++
+                }
+            } catch (e: Exception) {
+                // Continue with next agent
+            }
+        }
+        return Result.success(workDataOf("diaryCount" to diaryCount))
+    }
+}

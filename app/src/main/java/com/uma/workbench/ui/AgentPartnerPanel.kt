@@ -95,12 +95,32 @@ fun AgentPartnerPanel(
                             TextButton(onClick = { creatingGroup = true }, enabled = profiles.isNotEmpty()) { Text("新群聊") }
                         }
                     }
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("自动日记", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                        Row {
+                            TextButton(onClick = { viewModel.generateDiaryNow() }) { Text("定时生成", fontSize = 12.sp) }
+                            TextButton(onClick = { viewModel.triggerDiaryGeneration() }) { Text("立即生成全部", fontSize = 12.sp) }
+                        }
+                    }
                     LazyColumn {
                         items(profiles, key = { it.id }) { profile ->
-                            Text(
-                                "${profile.name} · ${if (profile.enabled) "启用" else "停用"}",
-                                modifier = Modifier.padding(4.dp)
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    "${profile.name} · ${if (profile.enabled) "启用" else "停用"}",
+                                    modifier = Modifier.weight(1f)
+                                )
+                                TextButton(onClick = { viewModel.triggerDiaryGeneration(profile.id) }) {
+                                    Text("生成日记", fontSize = 12.sp)
+                                }
+                            }
                         }
                         items(groups, key = { it.id }) { group ->
                             Text(

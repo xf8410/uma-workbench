@@ -204,6 +204,91 @@ class AgentPartnerViewModel(application: Application) : AndroidViewModel(applica
             .onFailure { _message.value = it.message ?: "删除群聊失败" }
     }
 
+
+    fun generateDiaryNow(agentId: String? = null) = viewModelScope.launch {
+        runCatching {
+            app.workScheduler.scheduleDiary(agentId, intervalHours = 24)
+        }.onSuccess { _message.value = "日记生成任务已调度" }
+         .onFailure { _message.value = it.message ?: "调度日记任务失败" }
+    }
+
+    fun cancelDiarySchedule(agentId: String? = null) = viewModelScope.launch {
+        runCatching {
+            app.workScheduler.cancelDiary(agentId)
+        }.onSuccess { _message.value = "日记定时任务已取消" }
+         .onFailure { _message.value = it.message ?: "取消日记任务失败" }
+    }
+
+    fun triggerDiaryGeneration(agentId: String? = null) = viewModelScope.launch {
+        runCatching {
+            val db = com.uma.workbench.agent.AgentPartnerDatabase.get(getApplication())
+            val store = app.agentPartnerStore
+            val catalogStore = AiProviderCatalogStore(getApplication())
+            val catalog = catalogStore.load()
+            val aiProfile = catalog.defaultModel?.let { mid ->
+                catalog.providers.firstOrNull { p -> mid in p.models }
+            } ?: error("未配置 AI 模型")
+            val aiProvider = CatalogAiStreamingProvider { aiProfile }
+            val targetIds = if (agentId != null) {
+                listOf(agentId)
+            } else {
+                db.profiles().getAllEnabled().map { it.id }
+            }
+            var count = 0
+            val today = java.time.LocalDate.now()
+            targetIds.forEach { targetId ->
+                val agentProfile = db.profiles().get(targetId) ?: return@forEach
+                val memberEntries = db.groups().groupsContainingMember(targetId)
+                if (memberEntries.isEmpty()) return@forEach
+                val conversationText = buildString {
+                    memberEntries.forEach { group ->
+                        val messages = db.groups().getRecentMessages(group.id, 20)
+                        if (messages.isNotEmpty()) {
+                            appendLine("## 群聊：${group.name}")
+                            messages.forEach { msg ->
+                                val sender = when (msg.senderType) {
+                                    "USER" -> "用户"
+                                    "AGENT" -> if (msg.senderAgentId == targetId) agentProfile.name else (msg.senderAgentId ?: "Agent")
+                                    else -> "系统"
+                                }
+                                appendLine("$sender: ${msg.content.take(500)}")
+                            }
+                            appendLine()
+                        }
+                    }
+                }
+                if (conversationText.isBlank()) return@forEach
+                val prompt = AgentDiaryPromptBuilder.build(agentProfile, today, conversationText)
+                val request = AiGenerationRequest(
+                    requestId = java.util.UUID.randomUUID().toString(),
+                    messages = listOf(AiPromptMessage(role = "user", completeContent = prompt)),
+                    model = catalog.defaultModel,
+                    tools = null
+                )
+                var fullText = ""
+                aiProvider.stream(request).collect { event ->
+                    when (event) {
+                        is AiStreamEvent.TextDelta -> fullText += event.completeDelta
+                        else -> {}
+                    }
+                }
+                if (fullText.isNotBlank()) {
+                    store.saveDiary(
+                        agentId = targetId,
+                        date = today,
+                        title = "${agentProfile.name} 的日记 - $today",
+                        content = fullText.trim(),
+                        sourceConversationId = null,
+                        sourceMessageRange = null,
+                        status = "DRAFT"
+                    )
+                    count++
+                }
+            }
+            _message.value = "已生成 $count 篇日记"
+        }.onFailure { _message.value = it.message ?: "生成日记失败" }
+    }
+
     fun retryFailedMessage(messageId: String) = viewModelScope.launch {
         val message = groupMessages.value.firstOrNull { it.id == messageId } ?: return@launch
         if (message.status != "FAILED") return@launch

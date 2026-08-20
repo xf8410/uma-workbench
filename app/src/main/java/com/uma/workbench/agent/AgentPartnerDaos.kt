@@ -11,6 +11,7 @@ interface AgentProfileDao {
     @Query("SELECT * FROM agent_profiles WHERE workspaceId = :workspaceId OR workspaceId IS NULL ORDER BY updatedAt DESC")
     fun observeForWorkspace(workspaceId: String?): Flow<List<AgentProfileEntity>>
     @Query("SELECT * FROM agent_profiles WHERE id = :id LIMIT 1") suspend fun get(id: String): AgentProfileEntity?
+    @Query("SELECT * FROM agent_profiles WHERE enabled = 1") suspend fun getAllEnabled(): List<AgentProfileEntity>
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(profile: AgentProfileEntity)
     @Query("UPDATE agent_profiles SET enabled = :enabled, updatedAt = :now WHERE id = :id") suspend fun setEnabled(id: String, enabled: Boolean, now: Long)
     @Query("DELETE FROM agent_profiles WHERE id = :id") suspend fun delete(id: String)
@@ -30,7 +31,7 @@ interface AgentGroupDao {
     @Query("SELECT * FROM agent_groups WHERE id = :id LIMIT 1") suspend fun get(id: String): AgentGroupEntity?
     @Query("SELECT * FROM agent_groups WHERE id = :id LIMIT 1") fun observeById(id: String): Flow<AgentGroupEntity?>
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(group: AgentGroupEntity)
-    @Query("DELETE FROM agent_groups WHERE id = :id") suspend fun delete(id: String)
+    @Query("DELETE FROM agent_groups WHERE id = :id") suspend fun delete(groupId: String)
     @Query("SELECT * FROM agent_group_members WHERE groupId = :groupId ORDER BY joinedAt") suspend fun members(groupId: String): List<AgentGroupMemberEntity>
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertMembers(members: List<AgentGroupMemberEntity>)
     @Query("DELETE FROM agent_group_members WHERE groupId = :groupId") suspend fun clearMembers(groupId: String)
@@ -53,4 +54,7 @@ interface AgentGroupDao {
 
     @Query("SELECT * FROM agent_group_messages WHERE groupId = :groupId ORDER BY sequence DESC LIMIT :limit")
     suspend fun getRecentMessages(groupId: String, limit: Int = 20): List<AgentGroupMessageEntity>
+
+    @Query("SELECT g.* FROM agent_groups g INNER JOIN agent_group_members m ON g.id = m.groupId WHERE m.agentId = :agentId")
+    suspend fun groupsContainingMember(agentId: String): List<AgentGroupEntity>
 }
