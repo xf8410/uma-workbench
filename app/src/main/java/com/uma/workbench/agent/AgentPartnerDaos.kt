@@ -31,7 +31,7 @@ interface AgentGroupDao {
     @Query("SELECT * FROM agent_groups WHERE id = :id LIMIT 1") suspend fun get(id: String): AgentGroupEntity?
     @Query("SELECT * FROM agent_groups WHERE id = :id LIMIT 1") fun observeById(id: String): Flow<AgentGroupEntity?>
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(group: AgentGroupEntity)
-    @Query("DELETE FROM agent_groups WHERE id = :id") suspend fun delete(groupId: String)
+    @Query("DELETE FROM agent_groups WHERE id = :id") suspend fun delete(id: String)
     @Query("SELECT * FROM agent_group_members WHERE groupId = :groupId ORDER BY joinedAt") suspend fun members(groupId: String): List<AgentGroupMemberEntity>
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertMembers(members: List<AgentGroupMemberEntity>)
     @Query("DELETE FROM agent_group_members WHERE groupId = :groupId") suspend fun clearMembers(groupId: String)
