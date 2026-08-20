@@ -46,6 +46,10 @@ import com.uma.workbench.agent.AgentGroupPolicy
 import com.uma.workbench.agent.AgentGroupMessageEntity
 import com.uma.workbench.agent.AgentPartnerViewModel
 import com.uma.workbench.agent.AgentProfileEntity
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 
 @Composable
 fun AgentPartnerPanel(
@@ -372,15 +376,15 @@ private data class ToolCallInfo(val tool: String, val status: String, val args: 
 private fun parseToolCalls(toolCallsJson: String?): List<ToolCallInfo> {
     if (toolCallsJson.isNullOrBlank()) return emptyList()
     return try {
-        val result = mutableListOf<ToolCallInfo>()
-        val objRegex = Regex("\\"tool\\":\\"([^\\"]*)\\".*?\\"status\\":\\"([^\\"]*)\\".*?\\"args\\":\\"((?:[^\\\\\\\\\\\\\\"\\\\\\\\]|\\\\\\\\.)*?)\\"\"")
-        for (m in objRegex.findAll(toolCallsJson)) {
-            val tool = m.groupValues[1]
-            val status = m.groupValues[2]
-            val args = m.groupValues[3].replace("\\\\"", """).replace("\\\\\\\\", "\\").take(150)
-            result.add(ToolCallInfo(tool, status, args))
+        val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+        val arr = json.parseToJsonElement(toolCallsJson).jsonArray
+        arr.mapNotNull { elem ->
+            val obj = elem.jsonObject
+            val tool = obj["tool"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            val status = obj["status"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            val args = obj["args"]?.jsonPrimitive?.contentOrNull?.take(150) ?: ""
+            ToolCallInfo(tool, status, args)
         }
-        result
     } catch (_: Exception) {
         emptyList()
     }
