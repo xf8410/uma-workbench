@@ -64,7 +64,34 @@ class AgentPartnerViewModel(application: Application) : AndroidViewModel(applica
                 val allProfiles = this@AgentPartnerViewModel.profiles.value.filter { it.id in members.map { m -> m.agentId } }
                 val recentMessages = store.recentGroupMessages(groupId, 10)
                 store.appendGroupMessage(groupId, "USER", null, content.trim())
-                val decision = AgentGroupTurnPlanner.plan(group, members, content, requestedAgentIds)
+                // Create runner early (needed for both manager planning and agent replies)
+                val runner = AgentGroupReplyRunnerImpl(
+                    provider = provider,
+                    source = AndroidReadonlyAgentToolDataSource(
+                        app, app.database, workspaceId.value ?: "",
+                        { ActiveWorkspaceDocumentBridge.document.value?.takeIf { it.workspaceId == (workspaceId.value ?: "") } }
+                    ),
+                    filesDir = app.filesDir
+                )
+                // Determine decision: use Manager Agent for MANAGER_SELECTS, otherwise rule-based
+                val decision = if (group.turnPolicy == AgentGroupPolicy.MANAGER_SELECTS && requestedAgentIds.isEmpty()) {
+                    val managerProfile = allProfiles.firstOrNull { it.id == group.managerAgentId }
+                    if (managerProfile != null) {
+                        AgentGroupReplyManagerPlanner.plan(
+                            runner = runner,
+                            managerProfile = managerProfile,
+                            members = members,
+                            memberProfiles = allProfiles,
+                            userMessage = content,
+                            groupContext = AgentGroupPolicy.buildContextInstructions(group, allProfiles, emptyList()),
+                            maxReplies = 2
+                        ).copy(groupId = groupId)
+                    } else {
+                        AgentGroupTurnPlanner.plan(group, members, content, requestedAgentIds)
+                    }
+                } else {
+                    AgentGroupTurnPlanner.plan(group, members, content, requestedAgentIds)
+                }
                 if (decision.selectedAgentIds.isEmpty()) {
                     _message.value = "本轮无伙伴被选中发言"
                     return@runCatching
@@ -79,14 +106,6 @@ class AgentPartnerViewModel(application: Application) : AndroidViewModel(applica
                     val placeholder = store.appendGroupMessage(groupId, "AGENT", profile.id, "⏳ 等待回复...")
                     pendingIds[profile.id] = placeholder.id
                 }
-                val runner = AgentGroupReplyRunnerImpl(
-                    provider = provider,
-                    source = AndroidReadonlyAgentToolDataSource(
-                        app, app.database, workspaceId.value ?: "",
-                        { ActiveWorkspaceDocumentBridge.document.value?.takeIf { it.workspaceId == (workspaceId.value ?: "") } }
-                    ),
-                    filesDir = app.filesDir
-                )
                 val coordinator = AgentGroupReplyCoordinator(runner)
                 val writer = object : AgentGroupMessageWriter {
                     override suspend fun append(groupId: String, senderType: String, senderAgentId: String?, content: String, toolCallsJson: String?): AgentGroupMessageEntity {
