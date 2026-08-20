@@ -29,22 +29,27 @@ class AgentGroupReplyService(
         val decision = AgentGroupTurnPlanner.plan(group, members, userMessage, requestedAgentIds)
         if (decision.selectedAgentIds.isEmpty()) return emptyList()
 
-        // Create PENDING placeholder messages for each selected agent (if not already created)
+        // Create PENDING placeholder messages for each selected agent
         val messageIds = if (pendingMessageIds.isNotEmpty()) {
             pendingMessageIds
         } else if (persister != null) {
             val ids = mutableMapOf<String, String>()
             decision.selectedAgentIds.distinct().forEach { agentId ->
-                val profile = profiles.firstOrNull { p -> p.id == agentId }
-                val name = profile?.name ?: agentId
                 val placeholder = writer.append(
-                    group.id, "AGENT", agentId, "⏳ 正在准备回复...", null
+                    group.id, "AGENT", agentId, "\u23f3 \u6b63\u5728\u51c6\u5907\u56de\u590d...", null
                 )
                 ids[agentId] = placeholder.id
             }
             ids
         } else {
             emptyMap()
+        }
+
+        // Mark all pending as RUNNING
+        if (persister != null) {
+            messageIds.forEach { (_, messageId) ->
+                persister.onRunning(messageId, "", "")
+            }
         }
 
         val context = AgentGroupPolicy.buildContextInstructions(group, profiles, importedHistory)
@@ -55,10 +60,35 @@ class AgentGroupReplyService(
                 persister = persister, messageIds = messageIds
             )
         } catch (ce: kotlinx.coroutines.CancellationException) {
-            messageIds.forEach { (_, messageId) ->
-                persister?.onCancelled(messageId)
+            if (persister != null) {
+                messageIds.forEach { (_, messageId) ->
+                    persister.onCancelled(messageId)
+                }
             }
             throw ce
+        }
+
+        // Persist final status
+        if (persister != null) {
+            replies.forEach { reply ->
+                val messageId = messageIds[reply.agentId] ?: return@forEach
+                if (reply.failed) {
+                    persister.onFailed(messageId, reply.content)
+                } else {
+                    persister.onCompleted(messageId, reply.content, 0, null)
+                }
+            }
+        } else {
+            // Fallback: write replies directly via writer (no status tracking)
+            replies.filter { !it.failed }.forEach { reply ->
+                writer.append(
+                    groupId = group.id,
+                    senderType = "AGENT",
+                    senderAgentId = reply.agentId,
+                    content = reply.content,
+                    toolCallsJson = null
+                )
+            }
         }
 
         return replies.filter { !it.failed }
