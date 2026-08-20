@@ -18,7 +18,7 @@ class AgentPartnerViewModel(application: Application) : AndroidViewModel(applica
     private val app = application as com.uma.workbench.WorkbenchApplication
     private val store = app.agentPartnerStore
     private val catalogStore = AiProviderCatalogStore(application)
-    private val provider = CatalogAiStreamingProvider { val cat = catalogStore.load(); val mid = cat.defaultModel; if (mid != null) cat.providers.firstOrNull { p -> mid in p.models } else null }
+    private val provider = CatalogAiStreamingProvider { val cat = catalogStore.load(); val mid = cat.defaultModel?.modelId; if (mid != null) cat.providers.firstOrNull { p -> mid in p.models } else null }
     private val _replyingAgents = MutableStateFlow<Map<String, String>>(emptyMap())
     val replyingAgents: StateFlow<Map<String, String>> = _replyingAgents.asStateFlow()
     private val workspaceId = MutableStateFlow<String?>(null)
