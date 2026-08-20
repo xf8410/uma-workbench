@@ -489,6 +489,7 @@ private fun CreateAgentGroupDialog(
             }
         }
     )
+}
 
 @Composable
 private fun EditGroupSettingsDialog(
@@ -677,4 +678,3 @@ private fun AddMemberDialog(
     )
 }
 
-}
