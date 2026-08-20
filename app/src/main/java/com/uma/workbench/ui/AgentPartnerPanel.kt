@@ -290,31 +290,32 @@ private fun GroupMessageItem(
                             )
                             .padding(8.dp)
                     ) {
-                        toolCalls.forEachIndexed { index, (tool, status, args) ->
+                        for (i in toolCalls.indices) {
+                            val tc = toolCalls[i]
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(vertical = 2.dp)
                             ) {
                                 Text(
-                                    (index + 1).toString() + ". ",
+                                    (i + 1).toString() + ". ",
                                     fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                                 )
                                 Text(
-                                    tool,
+                                    tc.tool,
                                     fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Spacer(Modifier.width(6.dp))
                                 Text(
-                                    if (status == "ok") "✅" else "❌",
+                                    if (tc.status == "ok") "✅" else "❌",
                                     fontSize = 11.sp
                                 )
                             }
-                            if (args.isNotBlank()) {
+                            if (tc.args.isNotBlank()) {
                                 Text(
-                                    args,
+                                    tc.args,
                                     fontSize = 10.sp,
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
                                     modifier = Modifier.padding(start = 16.dp, bottom = 4.dp)
@@ -363,6 +364,25 @@ private fun parseUsageSummary(usageJson: String?): String {
         if (match != null) "${match.groupValues[1]} tokens" else ""
     } catch (_: Exception) {
         ""
+    }
+}
+
+private data class ToolCallInfo(val tool: String, val status: String, val args: String)
+
+private fun parseToolCalls(toolCallsJson: String?): List<ToolCallInfo> {
+    if (toolCallsJson.isNullOrBlank()) return emptyList()
+    return try {
+        val result = mutableListOf<ToolCallInfo>()
+        val objRegex = Regex("\\"tool\\":\\"([^\\"]*)\\".*?\\"status\\":\\"([^\\"]*)\\".*?\\"args\\":\\"((?:[^\\\\\\\\\\\\\\"\\\\\\\\]|\\\\\\\\.)*?)\\"\"")
+        for (m in objRegex.findAll(toolCallsJson)) {
+            val tool = m.groupValues[1]
+            val status = m.groupValues[2]
+            val args = m.groupValues[3].replace("\\\\"", """).replace("\\\\\\\\", "\\").take(150)
+            result.add(ToolCallInfo(tool, status, args))
+        }
+        result
+    } catch (_: Exception) {
+        emptyList()
     }
 }
 
