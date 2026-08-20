@@ -11,13 +11,14 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.UUID
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 
 class AgentPartnerViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application as com.uma.workbench.WorkbenchApplication
     private val store = app.agentPartnerStore
     private val catalogStore = AiProviderCatalogStore(application)
-    private val provider = CatalogAiStreamingProvider { catalogStore.load().defaultModel?.let { mid -> catalogStore.load().providers.firstOrNull { mid in it.models } } }
+    private val provider = CatalogAiStreamingProvider { val cat = catalogStore.load(); val mid = cat.defaultModel; if (mid != null) cat.providers.firstOrNull { p -> mid in p.models } else null }
     private val _replyingAgents = MutableStateFlow<Map<String, String>>(emptyMap())
     val replyingAgents: StateFlow<Map<String, String>> = _replyingAgents.asStateFlow()
     private val workspaceId = MutableStateFlow<String?>(null)
@@ -54,10 +55,10 @@ class AgentPartnerViewModel(application: Application) : AndroidViewModel(applica
                     val runner = AgentGroupReplyRunnerImpl(
                         provider = provider,
                         source = AndroidReadonlyAgentToolDataSource(
-                            application, app.database, workspaceId.value ?: "",
+                            app, app.database, workspaceId.value ?: "",
                             { ActiveWorkspaceDocumentBridge.document.value?.takeIf { it.workspaceId == (workspaceId.value ?: "") } }
                         ),
-                        filesDir = application.filesDir
+                        filesDir = app.filesDir
                     )
                     val coordinator = AgentGroupReplyCoordinator(runner)
                     val writer = object : AgentGroupMessageWriter {
