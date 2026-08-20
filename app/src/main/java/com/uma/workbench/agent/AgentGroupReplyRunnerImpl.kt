@@ -16,7 +16,7 @@ class AgentGroupReplyRunnerImpl(
     override suspend fun run(
         agent: AgentProfileEntity,
         prompt: String
-    ): String {
+    ): AgentGroupReplyRunnerResult {
         val requestId = java.util.UUID.randomUUID().toString()
         val resultStore = FileAgentToolResultStore(
             File(filesDir, "agent-tool-results/group-replies/${agent.id}"),
@@ -42,7 +42,19 @@ class AgentGroupReplyRunnerImpl(
             tools = ReadonlyAgentToolSchemas.openAiCompatible
         )
         val result = loop.run(request)
-        return result.completeAnswer
+        val usageJson = buildString {
+            append("{\"input\":${result.usage.inputTokens}")
+            append(",\"output\":${result.usage.outputTokens}")
+            append(",\"total\":${result.usage.totalTokens}")
+            append(",\"estimated\":${result.usage.estimated}}")
+        }
+        return AgentGroupReplyRunnerResult(
+            content = result.completeAnswer,
+            requestId = result.requestId,
+            model = result.model,
+            roundsCount = result.rounds.size,
+            usageJson = usageJson
+        )
     }
 
     private fun extractUserQuestion(prompt: String): String {

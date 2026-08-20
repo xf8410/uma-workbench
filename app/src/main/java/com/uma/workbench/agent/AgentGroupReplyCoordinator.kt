@@ -6,7 +6,23 @@ import kotlinx.coroutines.supervisorScope
 
 /** Executes already-planned group turns without granting agents write or delegation tools. */
 fun interface AgentGroupReplyRunner {
-    suspend fun run(agent: AgentProfileEntity, prompt: String): String
+    suspend fun run(agent: AgentProfileEntity, prompt: String): AgentGroupReplyRunnerResult
+}
+
+data class AgentGroupReplyRunnerResult(
+    val content: String,
+    val requestId: String,
+    val model: String?,
+    val roundsCount: Int,
+    val usageJson: String?
+)
+
+/** Callbacks for persisting per-agent message execution status. */
+interface AgentGroupMessagePersister {
+    suspend fun onRunning(messageId: String, requestId: String, model: String)
+    suspend fun onCompleted(messageId: String, content: String, roundsCount: Int, usageJson: String?)
+    suspend fun onFailed(messageId: String, error: String)
+    suspend fun onCancelled(messageId: String)
 }
 
 data class AgentGroupReply(
@@ -26,21 +42,41 @@ class AgentGroupReplyCoordinator(
         profiles: List<AgentProfileEntity>,
         userMessage: String,
         groupContext: String,
-        historyMessages: List<AgentGroupMessageEntity> = emptyList()
+        historyMessages: List<AgentGroupMessageEntity> = emptyList(),
+        persister: AgentGroupMessagePersister? = null,
+        messageIds: Map<String, String> = emptyMap()
     ): List<AgentGroupReply> {
         require(userMessage.isNotBlank()) { "群消息不能为空" }
         val selected = decision.selectedAgentIds
             .distinct()
             .take(maxRepliesPerTurn)
-            .mapNotNull { id -> profiles.firstOrNull { it.id == id } }
+            .mapNotNull { agentId -> profiles.firstOrNull { p -> p.id == agentId } }
         return supervisorScope {
             selected.map { profile ->
                 async {
+                    val messageId = messageIds[profile.id]
                     runCatching {
-                        runner.run(profile, buildPrompt(profile, decision, userMessage, groupContext, historyMessages))
+                        if (messageId != null) {
+                            persister?.onRunning(messageId, "", "")
+                        }
+                        runner.run(
+                            profile,
+                            buildPrompt(profile, decision, userMessage, groupContext, historyMessages)
+                        )
                     }.fold(
-                        onSuccess = { AgentGroupReply(profile.id, it) },
-                        onFailure = { AgentGroupReply(profile.id, "Agent 执行失败：${it.message ?: "未知错误"}", true) }
+                        onSuccess = { result ->
+                            messageId?.let { mid ->
+                                persister?.onCompleted(mid, result.content, result.roundsCount, result.usageJson)
+                            }
+                            AgentGroupReply(profile.id, result.content)
+                        },
+                        onFailure = { e ->
+                            val errorMsg = e.message ?: "未知错误"
+                            messageId?.let { mid ->
+                                persister?.onFailed(mid, errorMsg)
+                            }
+                            AgentGroupReply(profile.id, "Agent 执行失败：$errorMsg", true)
+                        }
                     )
                 }
             }.awaitAll()

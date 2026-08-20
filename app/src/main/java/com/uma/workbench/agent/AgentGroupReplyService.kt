@@ -22,21 +22,45 @@ class AgentGroupReplyService(
         userMessage: String,
         requestedAgentIds: List<String> = emptyList(),
         importedHistory: List<AgentGroupHistoryImport> = emptyList(),
-        recentMessages: List<AgentGroupMessageEntity> = emptyList()
+        recentMessages: List<AgentGroupMessageEntity> = emptyList(),
+        persister: AgentGroupMessagePersister? = null,
+        pendingMessageIds: Map<String, String> = emptyMap()
     ): List<AgentGroupReply> {
         val decision = AgentGroupTurnPlanner.plan(group, members, userMessage, requestedAgentIds)
         if (decision.selectedAgentIds.isEmpty()) return emptyList()
-        val context = AgentGroupPolicy.buildContextInstructions(group, profiles, importedHistory)
-        val replies = coordinator.execute(decision, profiles, userMessage, context, recentMessages)
-        replies.forEach { reply ->
-            writer.append(
-                groupId = group.id,
-                senderType = "AGENT",
-                senderAgentId = reply.agentId,
-                content = reply.content,
-                toolCallsJson = if (reply.failed) "{\"failed\":true}" else null
-            )
+
+        // Create PENDING placeholder messages for each selected agent (if not already created)
+        val messageIds = if (pendingMessageIds.isNotEmpty()) {
+            pendingMessageIds
+        } else if (persister != null) {
+            val ids = mutableMapOf<String, String>()
+            decision.selectedAgentIds.distinct().forEach { agentId ->
+                val profile = profiles.firstOrNull { p -> p.id == agentId }
+                val name = profile?.name ?: agentId
+                val placeholder = writer.append(
+                    group.id, "AGENT", agentId, "⏳ 正在准备回复...", null
+                )
+                ids[agentId] = placeholder.id
+            }
+            ids
+        } else {
+            emptyMap()
         }
-        return replies
+
+        val context = AgentGroupPolicy.buildContextInstructions(group, profiles, importedHistory)
+
+        val replies = try {
+            coordinator.execute(
+                decision, profiles, userMessage, context, recentMessages,
+                persister = persister, messageIds = messageIds
+            )
+        } catch (ce: kotlinx.coroutines.CancellationException) {
+            messageIds.forEach { (_, messageId) ->
+                persister?.onCancelled(messageId)
+            }
+            throw ce
+        }
+
+        return replies.filter { !it.failed }
     }
 }

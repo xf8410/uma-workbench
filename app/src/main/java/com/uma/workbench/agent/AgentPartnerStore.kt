@@ -29,7 +29,8 @@ class AgentPartnerStore(private val database: AgentPartnerDatabase) {
         database.groups().updateMessageRunning(messageId, "RUNNING", requestId, model, System.currentTimeMillis())
     }
 
-    suspend fun updateMessageCompleted(messageId: String, roundsCount: Int, usageJson: String?) {
+    suspend fun updateMessageCompleted(messageId: String, content: String, roundsCount: Int, usageJson: String?) {
+        database.groups().updateMessageContent(messageId, content)
         database.groups().updateMessageResult(messageId, "COMPLETED", System.currentTimeMillis(), null, roundsCount, usageJson)
     }
 
@@ -39,6 +40,10 @@ class AgentPartnerStore(private val database: AgentPartnerDatabase) {
 
     suspend fun updateMessageCancelled(messageId: String) {
         database.groups().updateMessageStatus(messageId, "CANCELLED")
+    }
+
+    suspend fun updateMessageStatus(messageId: String, status: String) {
+        database.groups().updateMessageStatus(messageId, status)
     }
 
     suspend fun createGroup(workspaceId: String?, name: String, description: String?, managerAgentId: String, memberAgentIds: List<String>, turnPolicy: String = AgentGroupPolicy.MANAGER_SELECTS, groupPrompt: String? = null, history: List<AgentGroupHistoryImport> = emptyList()): AgentGroupEntity {

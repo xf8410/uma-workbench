@@ -41,13 +41,12 @@ interface AgentGroupDao {
     @Query("SELECT * FROM agent_group_context_sources WHERE groupId = :groupId ORDER BY importedAt DESC") suspend fun contextSources(groupId: String): List<AgentGroupContextSourceEntity>
     @Query("UPDATE agent_group_messages SET status = :status, completedAt = :completedAt, errorMessage = :errorMessage, roundsCount = :roundsCount, usageJson = :usageJson WHERE id = :messageId")
     suspend fun updateMessageResult(messageId: String, status: String, completedAt: Long?, errorMessage: String?, roundsCount: Int, usageJson: String?)
-
     @Query("UPDATE agent_group_messages SET status = :status, requestId = :requestId, model = :model, startedAt = :startedAt WHERE id = :messageId")
     suspend fun updateMessageRunning(messageId: String, status: String, requestId: String?, model: String?, startedAt: Long?)
-
     @Query("UPDATE agent_group_messages SET status = :status WHERE id = :messageId")
     suspend fun updateMessageStatus(messageId: String, status: String)
-
+    @Query("UPDATE agent_group_messages SET content = :content WHERE id = :messageId")
+    suspend fun updateMessageContent(messageId: String, content: String)
     @Query("SELECT * FROM agent_group_messages WHERE groupId = :groupId ORDER BY sequence DESC LIMIT :limit")
     suspend fun getRecentMessages(groupId: String, limit: Int = 20): List<AgentGroupMessageEntity>
 }
