@@ -225,10 +225,10 @@ class AgentPartnerViewModel(application: Application) : AndroidViewModel(applica
             val store = app.agentPartnerStore
             val catalogStore = AiProviderCatalogStore(getApplication())
             val catalog = catalogStore.load()
-            val aiProfile = catalog.defaultModel?.let { mid ->
-                catalog.providers.firstOrNull { p -> mid in p.models }
-            } ?: error("未配置 AI 模型")
+            val defaultModel = catalog.defaultModel ?: error("未配置 AI 模型")
+            val aiProfile = catalog.providers.firstOrNull { p -> p.id == defaultModel.providerId && defaultModel.modelId in p.models } ?: error("未配置 AI 模型")
             val aiProvider = CatalogAiStreamingProvider { aiProfile }
+            val modelId = defaultModel.modelId
             val targetIds = if (agentId != null) {
                 listOf(agentId)
             } else {
@@ -236,16 +236,16 @@ class AgentPartnerViewModel(application: Application) : AndroidViewModel(applica
             }
             var count = 0
             val today = java.time.LocalDate.now()
-            targetIds.forEach { targetId ->
-                val agentProfile = db.profiles().get(targetId) ?: return@forEach
+            for (targetId in targetIds) {
+                val agentProfile = db.profiles().get(targetId) ?: continue
                 val memberEntries = db.groups().groupsContainingMember(targetId)
-                if (memberEntries.isEmpty()) return@forEach
+                if (memberEntries.isEmpty()) continue
                 val conversationText = buildString {
-                    memberEntries.forEach { group ->
+                    for (group in memberEntries) {
                         val messages = db.groups().getRecentMessages(group.id, 20)
                         if (messages.isNotEmpty()) {
                             appendLine("## 群聊：${group.name}")
-                            messages.forEach { msg ->
+                            for (msg in messages) {
                                 val sender = when (msg.senderType) {
                                     "USER" -> "用户"
                                     "AGENT" -> if (msg.senderAgentId == targetId) agentProfile.name else (msg.senderAgentId ?: "Agent")
@@ -257,12 +257,12 @@ class AgentPartnerViewModel(application: Application) : AndroidViewModel(applica
                         }
                     }
                 }
-                if (conversationText.isBlank()) return@forEach
+                if (conversationText.isBlank()) continue
                 val prompt = AgentDiaryPromptBuilder.build(agentProfile, today, conversationText)
                 val request = AiGenerationRequest(
                     requestId = java.util.UUID.randomUUID().toString(),
                     messages = listOf(AiPromptMessage(role = "user", completeContent = prompt)),
-                    model = catalog.defaultModel,
+                    model = modelId,
                     tools = null
                 )
                 var fullText = ""

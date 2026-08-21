@@ -184,13 +184,15 @@ class DiaryWorker(context: Context, params: WorkerParameters) : UmaWorker(contex
         val store = com.uma.workbench.agent.AgentPartnerStore(db)
         val catalogStore = com.uma.workbench.agent.AiProviderCatalogStore(applicationContext)
         val catalog = catalogStore.load()
-        val profile = catalog.defaultModel?.let { mid ->
-            catalog.providers.firstOrNull { p -> mid in p.models }
-        }
+        val defaultModel = catalog.defaultModel
+        val profile = if (defaultModel != null) {
+            catalog.providers.firstOrNull { p -> p.id == defaultModel.providerId && defaultModel.modelId in p.models }
+        } else null
         if (profile == null) {
             return Result.failure(workDataOf("error" to "未配置 AI 模型"))
         }
         val provider = com.uma.workbench.agent.CatalogAiStreamingProvider { profile }
+        val modelId = defaultModel!!.modelId
         val targetAgentIds = if (agentId != null) {
             listOf(agentId)
         } else {
@@ -201,17 +203,17 @@ class DiaryWorker(context: Context, params: WorkerParameters) : UmaWorker(contex
         }
         var diaryCount = 0
         val today = java.time.LocalDate.now()
-        targetAgentIds.forEach { targetAgentId ->
+        for (targetAgentId in targetAgentIds) {
             try {
-                val agentProfile = db.profiles().get(targetAgentId) ?: return@forEach
+                val agentProfile = db.profiles().get(targetAgentId) ?: continue
                 val memberEntries = db.groups().groupsContainingMember(targetAgentId)
-                if (memberEntries.isEmpty()) return@forEach
+                if (memberEntries.isEmpty()) continue
                 val conversationText = buildString {
-                    memberEntries.forEach { group ->
+                    for (group in memberEntries) {
                         val messages = db.groups().getRecentMessages(group.id, 20)
                         if (messages.isNotEmpty()) {
                             appendLine("## 群聊：${group.name}")
-                            messages.forEach { msg ->
+                            for (msg in messages) {
                                 val sender = when (msg.senderType) {
                                     "USER" -> "用户"
                                     "AGENT" -> if (msg.senderAgentId == targetAgentId) agentProfile.name else (msg.senderAgentId ?: "Agent")
@@ -223,12 +225,12 @@ class DiaryWorker(context: Context, params: WorkerParameters) : UmaWorker(contex
                         }
                     }
                 }
-                if (conversationText.isBlank()) return@forEach
+                if (conversationText.isBlank()) continue
                 val prompt = com.uma.workbench.agent.AgentDiaryPromptBuilder.build(agentProfile, today, conversationText)
                 val request = com.uma.workbench.agent.AiGenerationRequest(
                     requestId = java.util.UUID.randomUUID().toString(),
                     messages = listOf(com.uma.workbench.agent.AiPromptMessage(role = "user", completeContent = prompt)),
-                    model = catalog.defaultModel,
+                    model = modelId,
                     tools = null
                 )
                 var fullText = ""
@@ -256,6 +258,6 @@ class DiaryWorker(context: Context, params: WorkerParameters) : UmaWorker(contex
                 // Continue with next agent
             }
         }
-        return Result.success(workDataOf("diaryCount" to diaryCount))
+        return Result.success(workDataOf("diaryCount" to diaryCount.toString()))
     }
 }
