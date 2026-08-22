@@ -2,6 +2,7 @@ package com.uma.workbench.github
 
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLEncoder
 import java.util.Base64
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -27,8 +28,9 @@ class GitHubContributionGatewayImpl(
         val forkOwner = upstream["owner"]!!.jsonObject["login"]!!.jsonPrimitive.content
         val forkRepo = upstream["name"]!!.jsonPrimitive.content
         val upstreamInfo = request("GET", "/repos/$owner/$repo")
-        val forkDefault = upstream["default_branch"]?.jsonPrimitive?.content ?: upstreamInfo["default_branch"]!!.jsonPrimitive.content
-        return GitHubForkResult(GitHubForkBinding(owner, repo, forkOwner, forkRepo, upstreamInfo["default_branch"]!!.jsonPrimitive.content, forkDefault), upstream["html_url"]?.jsonPrimitive?.content, true)
+        val upstreamDefault = upstreamInfo["default_branch"]!!.jsonPrimitive.content
+        val forkDefault = upstream["default_branch"]?.jsonPrimitive?.content ?: upstreamDefault
+        return GitHubForkResult(GitHubForkBinding(owner, repo, forkOwner, forkRepo, upstreamDefault, forkDefault), upstream["html_url"]?.jsonPrimitive?.content, true)
     }
 
     override suspend fun createWorkbenchBranch(binding: GitHubForkBinding, branch: String, confirmationId: String?): GitHubContributionBranch {
@@ -49,19 +51,19 @@ class GitHubContributionGatewayImpl(
         return GitRef(branch, result["commit"]!!.jsonObject["sha"]!!.jsonPrimitive.content)
     }
 
-    override suspend fun createCrossForkPullRequest(request: GitHubCrossForkPullRequestRequest): GitHubContributionPullRequest {
-        policy.requireConfirmation("向 ${request.binding.upstreamOwner}/${request.binding.upstreamRepo} 创建 Pull Request", request.confirmationId)
-        GitHubContributionPolicy.validateTarget(request)
-        val payload = buildJsonObject { put("title", request.title); put("body", request.body); put("head", GitHubContributionPolicy.headRef(request.binding, request.headBranch)); put("base", request.baseBranch); put("draft", request.draft) }
-        val result = request("POST", "/repos/${request.binding.upstreamOwner}/${request.binding.upstreamRepo}/pulls", json.encodeToString(payload))
+    override suspend fun createCrossForkPullRequest(req: GitHubCrossForkPullRequestRequest): GitHubContributionPullRequest {
+        policy.requireConfirmation("向 ${req.binding.upstreamOwner}/${req.binding.upstreamRepo} 创建 Pull Request", req.confirmationId)
+        GitHubContributionPolicy.validateTarget(req)
+        val payload = buildJsonObject { put("title", req.title); put("body", req.body); put("head", GitHubContributionPolicy.headRef(req.binding, req.headBranch)); put("base", req.baseBranch); put("draft", req.draft) }
+        val result = request("POST", "/repos/${req.binding.upstreamOwner}/${req.binding.upstreamRepo}/pulls", json.encodeToString(payload))
         val head = result["head"]!!.jsonObject; val base = result["base"]!!.jsonObject
-        return GitHubContributionPullRequest(result["number"]!!.jsonPrimitive.int, result["html_url"]!!.jsonPrimitive.content, result["state"]!!.jsonPrimitive.content, head["repo"]!!.jsonObject["owner"]!!.jsonPrimitive.content, head["repo"]!!.jsonObject["name"]!!.jsonPrimitive.content, head["ref"]!!.jsonPrimitive.content, base["repo"]!!.jsonObject["owner"]!!.jsonPrimitive.content, base["repo"]!!.jsonObject["name"]!!.jsonPrimitive.content, base["ref"]!!.jsonPrimitive.content)
+        return GitHubContributionPullRequest(result["number"]!!.jsonPrimitive.int, result["html_url"]!!.jsonPrimitive.content, result["state"]!!.jsonPrimitive.content, head["repo"]!!.jsonObject["owner"]!!.jsonPrimitive.content, head["repo"]!!.jsonObject["name"]!!.jsonPrimitive.content, head["ref"]!!.jsonPrimitive.content, base["repo"]!!.jsonObject["owner"]!!.jsonPrimitive.content, base["repo"]!!.jsonPrimitive.content, base["ref"]!!.jsonPrimitive.content)
     }
 
     private suspend fun request(method: String, path: String, body: String? = null): kotlinx.serialization.json.JsonObject = withContext(Dispatchers.IO) {
         val connection = (URL(apiBaseUrl.trimEnd('/') + path).openConnection() as HttpURLConnection).apply { requestMethod = method; connectTimeout = 15_000; readTimeout = 30_000; doOutput = body != null; setRequestProperty("Accept", "application/vnd.github+json"); setRequestProperty("X-GitHub-Api-Version", "2022-11-28"); setRequestProperty("Authorization", "Bearer $token"); if (body != null) { setRequestProperty("Content-Type", "application/json"); outputStream.use { it.write(body.toByteArray()) } } }
         val status = connection.responseCode; val text = (if (status in 200..299) connection.inputStream else connection.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty(); if (status !in 200..299) error("GitHub API $status: $text"); json.parseToJsonElement(text).jsonObject
     }
-    private fun path(value: String) = value.split('/').joinToString("/") { java.net.URLEncoder.encode(it, "UTF-8").replace("+", "%20") }
+    private fun path(value: String) = value.split('/').joinToString("/") { URLEncoder.encode(it, "UTF-8").replace("+", "%20") }
     private fun branchName(value: String) = path(value)
 }
