@@ -6,15 +6,14 @@ import java.net.URLEncoder
 import java.util.Base64
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.buildJsonObject
 
 /** Mutation adapter kept separate from the read-only GitHub client. */
 class GitHubContributionGatewayImpl(
@@ -27,7 +26,7 @@ class GitHubContributionGatewayImpl(
     override suspend fun fork(owner: String, repo: String, confirmationId: String?): GitHubForkResult {
         policy.requireConfirmation("创建 Fork $owner/$repo", confirmationId)
         val upstream = request("POST", "/repos/$owner/$repo/forks", "{}")
-        val forkOwner = required(upstream, "owner").jsonObject.let { required(it, "login") }
+        val forkOwner = requiredObject(upstream, "owner").let { required(it, "login") }
         val forkRepo = required(upstream, "name")
         val upstreamInfo = request("GET", "/repos/$owner/$repo")
         val upstreamDefault = required(upstreamInfo, "default_branch")
@@ -43,7 +42,7 @@ class GitHubContributionGatewayImpl(
         policy.requireConfirmation("创建分支 ${binding.forkOwner}/${binding.forkRepo}:$branch", confirmationId)
         require(branch.startsWith("workbench/")) { "贡献分支必须使用 workbench/* 前缀" }
         val base = request("GET", "/repos/${binding.forkOwner}/${binding.forkRepo}/git/ref/heads/${branchName(binding.forkDefaultBranch)}")
-        val sha = required(required(base, "object").jsonObject, "sha")
+        val sha = required(requiredObject(base, "object"), "sha")
         request("POST", "/repos/${binding.forkOwner}/${binding.forkRepo}/git/refs", encode(buildJsonObject {
             put("ref", "refs/heads/$branch")
             put("sha", sha)
@@ -64,7 +63,7 @@ class GitHubContributionGatewayImpl(
             existing?.get("sha")?.jsonPrimitive?.contentOrNull?.let { put("sha", it) }
         }
         val result = request("PUT", "/repos/${binding.forkOwner}/${binding.forkRepo}/contents/${path(change.path)}", encode(payload))
-        return GitRef(branch, required(required(result, "commit").jsonObject, "sha"))
+        return GitRef(branch, required(requiredObject(result, "commit"), "sha"))
     }
 
     override suspend fun createCrossForkPullRequest(req: GitHubCrossForkPullRequestRequest): GitHubContributionPullRequest {
@@ -78,18 +77,18 @@ class GitHubContributionGatewayImpl(
             put("draft", req.draft)
         }
         val result = request("POST", "/repos/${req.binding.upstreamOwner}/${req.binding.upstreamRepo}/pulls", encode(payload))
-        val head = required(result, "head").jsonObject
-        val base = required(result, "base").jsonObject
-        val headRepo = required(head, "repo").jsonObject
-        val baseRepo = required(base, "repo").jsonObject
+        val head = requiredObject(result, "head")
+        val base = requiredObject(result, "base")
+        val headRepo = requiredObject(head, "repo")
+        val baseRepo = requiredObject(base, "repo")
         return GitHubContributionPullRequest(
             required(result, "number").toInt(),
             required(result, "html_url"),
             required(result, "state"),
-            required(required(headRepo, "owner").jsonObject, "login"),
+            required(requiredObject(headRepo, "owner"), "login"),
             required(headRepo, "name"),
             required(head, "ref"),
-            required(required(baseRepo, "owner").jsonObject, "login"),
+            required(requiredObject(baseRepo, "owner"), "login"),
             required(baseRepo, "name"),
             required(base, "ref")
         )
@@ -119,6 +118,9 @@ class GitHubContributionGatewayImpl(
 
     private fun required(value: JsonObject, name: String): String =
         value[name]?.jsonPrimitive?.contentOrNull ?: error("GitHub 响应缺少字段 $name")
+
+    private fun requiredObject(value: JsonObject, name: String): JsonObject =
+        value[name]?.jsonObject ?: error("GitHub 响应缺少对象字段 $name")
 
     private fun path(value: String): String = value.split('/').joinToString("/") {
         URLEncoder.encode(it, Charsets.UTF_8.name()).replace("+", "%20")
