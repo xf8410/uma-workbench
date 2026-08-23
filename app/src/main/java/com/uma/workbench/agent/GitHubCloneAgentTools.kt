@@ -80,7 +80,7 @@ class TarEntryReader(private val input: InputStream) : Closeable {
 
         when (typeFlag) {
             'L'.code.toByte() -> {
-                longName = entry.data.readBytes().toString(Charsets.UTF_8).trimEnd('\n', ' ', '\0')
+                longName = entry.data.readBytes().toString(Charsets.UTF_8).trimEnd('\n', ' ', '\u0000')
                 return next() // 长名头本身不产出
             }
             'x'.code.toByte() -> {
@@ -333,7 +333,13 @@ class AndroidGitHubCloneAgentToolDataSource(
                 connection.disconnect()
                 throw GitHubApiException(status, body)
             }
-            stream = GZIPInputStream(connection.inputStream)
+            // 嗅探 gzip 魔数：部分网络栈会做透明解压，此时不能再包一层 GZIPInputStream
+            val pushback = java.io.PushbackInputStream(connection.inputStream, 2)
+            val b0 = pushback.read()
+            val b1 = pushback.read()
+            pushback.unread(b1)
+            pushback.unread(b0)
+            stream = if (b0 == 0x1f && b1 == 0x8b) GZIPInputStream(pushback) else pushback
             return WrapStream(stream) { connection.disconnect() }
         } catch (e: Exception) {
             stream?.close()
