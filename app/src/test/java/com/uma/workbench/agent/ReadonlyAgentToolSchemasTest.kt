@@ -40,7 +40,7 @@ class ReadonlyAgentToolSchemasTest {
     @Test fun childSchemaExcludesDelegationAndGitHubQuotaTools() {
         val names = names(ReadonlyAgentToolSchemas.childReadOnly)
         assertFalse("delegate_subagents" in names)
-        val rootOnlyGithub = githubNames + contributionNames
+        val rootOnlyGithub = githubNames + contributionNames + setOf("github_clone_repository")
         assertTrue(names.intersect(rootOnlyGithub).isEmpty())
         assertEquals(ReadonlyAgentToolPolicy.allowedNames - rootOnlyGithub - "delegate_subagents", names)
     }

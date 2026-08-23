@@ -174,7 +174,7 @@ object GitHubClonePaths {
     fun safeRelative(entryPath: String): String? {
         val normalized = entryPath.replace('\\', '/')
         if (normalized.startsWith("/")) return null
-        val parts = normalized.split('/').filter { it.isNotEmpty() }
+        val parts = normalized.split('/').filter { it.isNotEmpty() && it != "." }
         if (parts.isEmpty() || parts.any { it == ".." }) return null
         if (parts.any { it.length > 2 && it[1] == ':' }) return null // 盘符
         return parts.joinToString("/")
