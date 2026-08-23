@@ -5,6 +5,7 @@ import com.uma.workbench.agent.ActiveWorkspaceDocumentBridge
 import com.uma.workbench.agent.AiStreamingProvider
 import com.uma.workbench.agent.AndroidReadonlyAgentToolDataSource
 import com.uma.workbench.agent.FileAgentToolResultStore
+import com.uma.workbench.agent.GitHubCloneAgentToolDataSource
 import com.uma.workbench.agent.GitHubContributionAgentToolDataSource
 import com.uma.workbench.agent.GitHubReadonlyAgentToolDataSource
 import com.uma.workbench.agent.ReadonlyAgentLoop
@@ -26,6 +27,7 @@ internal object AiChatRuntimeFactory {
         conversationId = conversationId,
         githubSource = app.githubReadonlyAgentSource,
         githubContributionSource = app.githubContributionAgentSource,
+        githubCloneSource = app.githubCloneAgentSource,
         workspaceSource = AndroidReadonlyAgentToolDataSource(
             app, app.database, workspaceId, { ActiveWorkspaceDocumentBridge.document.value }
         )
@@ -38,7 +40,8 @@ internal object AiChatRuntimeFactory {
         conversationId: String,
         githubSource: GitHubReadonlyAgentToolDataSource,
         workspaceSource: ReadonlyAgentToolDataSource,
-        githubContributionSource: GitHubContributionAgentToolDataSource? = null
+        githubContributionSource: GitHubContributionAgentToolDataSource? = null,
+        githubCloneSource: GitHubCloneAgentToolDataSource? = null
     ): ReadonlyAgentLoop {
         val resultStore = FileAgentToolResultStore(
             File(filesDir, "agent-tool-results/$workspaceId/$conversationId"),
@@ -50,7 +53,8 @@ internal object AiChatRuntimeFactory {
             source = workspaceSource,
             resultStore = resultStore,
             githubSource = githubSource,
-            githubContributionSource = githubContributionSource
+            githubContributionSource = githubContributionSource,
+            githubCloneSource = githubCloneSource
         ).createRootLoop()
     }
 }

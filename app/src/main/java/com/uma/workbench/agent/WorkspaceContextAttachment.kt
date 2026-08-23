@@ -13,6 +13,16 @@ data class ActiveWorkspaceDocument(
     val title: String
 )
 
+/** Shared UI bridge containing the active workspace identity. */
+object ActiveWorkspaceBridge {
+    private val _workspaceId = MutableStateFlow<String?>(null)
+    val workspaceId: StateFlow<String?> = _workspaceId.asStateFlow()
+
+    fun publish(id: String?) {
+        _workspaceId.value = id
+    }
+}
+
 /** Shared UI bridge containing the active document identity. */
 object ActiveWorkspaceDocumentBridge {
     private val _document = MutableStateFlow<ActiveWorkspaceDocument?>(null)

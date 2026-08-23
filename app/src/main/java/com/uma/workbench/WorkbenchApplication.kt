@@ -4,7 +4,10 @@ import android.app.Application
 import com.uma.workbench.agent.AgentPartnerDatabase
 import com.uma.workbench.agent.AgentPartnerStore
 import com.uma.workbench.agent.AndroidGitHubReadonlyAgentToolDataSource
+import com.uma.workbench.agent.ActiveWorkspaceBridge
+import com.uma.workbench.agent.AndroidGitHubCloneAgentToolDataSource
 import com.uma.workbench.agent.AndroidGitHubContributionAgentToolDataSource
+import com.uma.workbench.agent.GitHubCloneAgentToolDataSource
 import com.uma.workbench.agent.GitHubContributionAgentToolDataSource
 import com.uma.workbench.agent.GitHubReadonlyAgentToolDataSource
 import com.uma.workbench.data.AppDatabase
@@ -31,6 +34,7 @@ class WorkbenchApplication : Application() {
         private set
     lateinit var githubReadonlyAgentSource: GitHubReadonlyAgentToolDataSource
     lateinit var githubContributionAgentSource: GitHubContributionAgentToolDataSource
+    lateinit var githubCloneAgentSource: GitHubCloneAgentToolDataSource
         private set
     lateinit var agentPartnerStore: AgentPartnerStore
         private set
@@ -49,6 +53,7 @@ class WorkbenchApplication : Application() {
         workScheduler = WorkScheduler(this)
         githubReadonlyAgentSource = AndroidGitHubReadonlyAgentToolDataSource(this)
         githubContributionAgentSource = AndroidGitHubContributionAgentToolDataSource(this)
+        githubCloneAgentSource = AndroidGitHubCloneAgentToolDataSource(this, database) { ActiveWorkspaceBridge.workspaceId.value }
         agentPartnerStore = AgentPartnerStore(AgentPartnerDatabase.get(this))
     }
 }

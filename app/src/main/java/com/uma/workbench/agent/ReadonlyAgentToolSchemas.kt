@@ -123,6 +123,12 @@ object ReadonlyAgentToolSchemas {
             required = listOf("progress", "path", "content", "commitMessage", "confirmationId")
         )
         function(
+            "github_clone_repository",
+            "把 GitHub 仓库完整克隆到本地工作区（下载 tarball 并解包）。克隆后用 list_workspace_files 列出全部文件，read_file/search_workspace 直接读取。ref 留空用默认分支",
+            strings = listOf("owner", "repo", "ref"),
+            required = listOf("owner", "repo")
+        )
+        function(
             "github_contribute_pr",
             "GitHub 贡献流第4步：从 fork 分支向上游仓库发起跨 fork PR。progress 传上一步返回的 JSON；要求至少已提交一个文件",
             strings = listOf("progress", "title", "body", "confirmationId"),

@@ -20,7 +20,8 @@ class ReadonlyAgentRuntimeFactory(
     private val toolLimits: AgentToolExecutionLimits = AgentToolExecutionLimits(),
     private val subAgentLimits: SubAgentLimits = SubAgentLimits(),
     private val githubSource: GitHubReadonlyAgentToolDataSource? = null,
-    private val githubContributionSource: GitHubContributionAgentToolDataSource? = null
+    private val githubContributionSource: GitHubContributionAgentToolDataSource? = null,
+    private val githubCloneSource: GitHubCloneAgentToolDataSource? = null
 ) {
     fun createRootLoop(): ReadonlyAgentLoop {
         val coordinator = SubAgentCoordinator(
@@ -46,7 +47,8 @@ class ReadonlyAgentRuntimeFactory(
         limits = toolLimits,
         resultStore = resultStore,
         githubSource = githubSource,
-        githubContributionSource = githubContributionSource
+        githubContributionSource = githubContributionSource,
+        githubCloneSource = githubCloneSource
     )
 
     private fun createChildExecutor() = ReadonlyAgentToolExecutor(

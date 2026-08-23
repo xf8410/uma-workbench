@@ -24,12 +24,13 @@ class ReadonlyAgentToolSchemasTest {
     @Test fun schemaNamesExactlyMatchReadonlyPolicy() {
         val names = names(ReadonlyAgentToolSchemas.openAiCompatible)
         assertEquals(ReadonlyAgentToolPolicy.allowedNames, names)
-        assertFalse("除贡献流外不得出现写/删/改类工具") {
+        assertFalse(
+            "除贡献流外不得出现写/删/改类工具",
             names.any {
                 it !in contributionNames &&
                     (it.contains("write") || it.contains("delete") || it.contains("apply"))
             }
-        }
+        )
         assertTrue("read_tool_result" in names)
         assertTrue("delegate_subagents" in names)
         assertTrue(names.containsAll(githubNames))
