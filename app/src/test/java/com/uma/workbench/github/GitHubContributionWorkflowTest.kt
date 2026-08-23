@@ -1,8 +1,8 @@
 package com.uma.workbench.github
 
-import kotlinx.coroutines.test.assertFailsWith
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.fail
 import org.junit.Test
 
 class GitHubContributionWorkflowTest {
@@ -31,10 +31,12 @@ class GitHubContributionWorkflowTest {
         val fake = FakeGateway(binding)
         val workflow = GitHubContributionWorkflow(fake)
         val progress = workflow.createBranch(workflow.createFork("upstream", "project", "confirm"), "workbench/fix", "confirm")
-        val error = assertFailsWith<IllegalArgumentException> {
+        try {
             workflow.createPullRequest(progress, "title", "body", false, "confirm")
+            fail("未提交文件变更时创建 PR 应该抛 IllegalArgumentException")
+        } catch (e: IllegalArgumentException) {
+            assertEquals("请先提交至少一个文件变更", e.message)
         }
-        assertEquals("请先提交至少一个文件变更", error.message)
         assertEquals(listOf("fork", "branch"), fake.calls)
     }
 }
