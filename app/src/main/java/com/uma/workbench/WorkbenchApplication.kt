@@ -4,6 +4,8 @@ import android.app.Application
 import com.uma.workbench.agent.AgentPartnerDatabase
 import com.uma.workbench.agent.AgentPartnerStore
 import com.uma.workbench.agent.AndroidGitHubReadonlyAgentToolDataSource
+import com.uma.workbench.agent.AndroidGitHubContributionAgentToolDataSource
+import com.uma.workbench.agent.GitHubContributionAgentToolDataSource
 import com.uma.workbench.agent.GitHubReadonlyAgentToolDataSource
 import com.uma.workbench.data.AppDatabase
 import com.uma.workbench.data.WorkbenchRepository
@@ -28,6 +30,7 @@ class WorkbenchApplication : Application() {
     lateinit var networkState: kotlinx.coroutines.flow.StateFlow<NetworkState>
         private set
     lateinit var githubReadonlyAgentSource: GitHubReadonlyAgentToolDataSource
+    lateinit var githubContributionAgentSource: GitHubContributionAgentToolDataSource
         private set
     lateinit var agentPartnerStore: AgentPartnerStore
         private set
@@ -45,6 +48,7 @@ class WorkbenchApplication : Application() {
         sourceImporter = SourceImporter(contentResolver)
         workScheduler = WorkScheduler(this)
         githubReadonlyAgentSource = AndroidGitHubReadonlyAgentToolDataSource(this)
+        githubContributionAgentSource = AndroidGitHubContributionAgentToolDataSource(this)
         agentPartnerStore = AgentPartnerStore(AgentPartnerDatabase.get(this))
     }
 }

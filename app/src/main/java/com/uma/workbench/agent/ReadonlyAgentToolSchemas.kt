@@ -15,6 +15,7 @@ object ReadonlyAgentToolSchemas {
     val openAiCompatible: JsonArray = buildJsonArray {
         addWorkspaceReadOnlyTools()
         addGitHubReadOnlyTools()
+        addGitHubContributionTools()
         add(buildJsonObject {
             put("type", "function")
             put("function", buildJsonObject {
@@ -99,6 +100,34 @@ object ReadonlyAgentToolSchemas {
             strings = listOf("owner", "name"),
             positiveIntegers = listOf("page"),
             required = listOf("owner", "name")
+        )
+    }
+
+    private fun JsonArrayBuilder.addGitHubContributionTools() {
+        function(
+            "github_contribute_fork",
+            "GitHub 贡献流第1步：fork 上游仓库到当前账号。需要 confirmationId（UI 确认流程发放）；返回的 progress JSON 传给下一步工具",
+            strings = listOf("owner", "repo", "confirmationId"),
+            required = listOf("owner", "repo", "confirmationId")
+        )
+        function(
+            "github_contribute_branch",
+            "GitHub 贡献流第2步：在 fork 上创建 workbench/* 分支。progress 传上一步返回的 JSON；分支名必须以 workbench/ 开头",
+            strings = listOf("progress", "branch", "confirmationId"),
+            required = listOf("progress", "branch", "confirmationId")
+        )
+        function(
+            "github_contribute_write",
+            "GitHub 贡献流第3步：把一个文件的内容提交到 fork 分支。progress 传上一步返回的 JSON；可多次调用累积提交",
+            strings = listOf("progress", "path", "content", "commitMessage", "confirmationId"),
+            required = listOf("progress", "path", "content", "commitMessage", "confirmationId")
+        )
+        function(
+            "github_contribute_pr",
+            "GitHub 贡献流第4步：从 fork 分支向上游仓库发起跨 fork PR。progress 传上一步返回的 JSON；要求至少已提交一个文件",
+            strings = listOf("progress", "title", "body", "confirmationId"),
+            booleans = listOf("draft"),
+            required = listOf("progress", "title", "body", "confirmationId")
         )
     }
 

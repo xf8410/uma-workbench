@@ -16,7 +16,9 @@ object ReadonlyAgentToolPolicy {
         "search_workspace", "search_symbol", "read_il2cpp_class", "read_protocol_record",
         "read_so_snapshot", "read_doc", "read_tool_result", "delegate_subagents",
         "github_list_repositories", "github_get_repository", "github_list_branches",
-        "github_read_file", "github_list_commits", "github_get_workflow_runs"
+        "github_read_file", "github_list_commits", "github_get_workflow_runs",
+        "github_contribute_fork", "github_contribute_branch",
+        "github_contribute_write", "github_contribute_pr"
     )
     val toolsAllowingEmptyArguments: Set<String> = setOf(
         "list_workspace_files", "read_current_file", "read_so_snapshot", "github_list_repositories"

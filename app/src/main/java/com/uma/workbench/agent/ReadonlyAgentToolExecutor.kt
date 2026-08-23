@@ -32,7 +32,8 @@ class ReadonlyAgentToolExecutor(
  private val limits:AgentToolExecutionLimits=AgentToolExecutionLimits(),
  private val resultStore:AgentToolResultStore=InMemoryAgentToolResultStore(),
  private val nowMillis:()->Long=System::currentTimeMillis,
- private val githubSource:GitHubReadonlyAgentToolDataSource?=null
+ private val githubSource:GitHubReadonlyAgentToolDataSource?=null,
+ private val githubContributionSource:GitHubContributionAgentToolDataSource?=null
 ){
  suspend fun executeTurn(rawCalls:List<AiToolCall>):List<AgentToolOutcome>{val calls=AiToolCallNormalizer.normalize(rawCalls);require(calls.size<=limits.maxCallsPerTurn){"本轮工具调用 ${calls.size} 超过上限 ${limits.maxCallsPerTurn}"};val cache=linkedMapOf<String,AgentToolOutcome>();return calls.map{call->val key=AiToolCallNormalizer.semanticFingerprint(call);cache[key]?.forCall(call)?:execute(call).also{cache[key]=it}}}
  suspend fun execute(call:AiToolCall):AgentToolOutcome=timed(call){args->if(call.name=="read_tool_result")readStoredPage(args)else storePaged(call.name,dispatch(call.name,args))}
@@ -43,6 +44,7 @@ class ReadonlyAgentToolExecutor(
  private fun completeStored(id:String)=resultStore.read(id,0,Int.MAX_VALUE)
  private fun AgentToolOutcome.forCall(call:AiToolCall)=when(this){is AgentToolOutcome.Success->AgentToolOutcome.Success(result.copy(callId=call.id,toolName=call.name,elapsedMillis=0));is AgentToolOutcome.Failure->AgentToolOutcome.Failure(failure.copy(callId=call.id,toolName=call.name,elapsedMillis=0))}
  private fun github():GitHubReadonlyAgentToolDataSource=githubSource?:error("GitHub 只读工具未配置")
+ private fun githubContribution():GitHubContributionAgentToolDataSource=githubContributionSource?:error("GitHub 贡献流工具未配置")
  private suspend fun dispatch(name:String,args:JsonObject):String=when(name){
   "list_workspace_files"->source.listWorkspaceFiles()
   "read_current_file"->source.readCurrentFile()
@@ -60,6 +62,10 @@ class ReadonlyAgentToolExecutor(
   "github_read_file"->github().readFile(args.requiredString("owner"),args.requiredString("name"),args.requiredString("ref"),args.requiredStringAllowEmpty("path"))
   "github_list_commits"->github().listCommits(args.requiredString("owner"),args.requiredString("name"),args.requiredString("ref"),args.optionalPositiveInt("page")?:1)
   "github_get_workflow_runs"->github().getWorkflowRuns(args.requiredString("owner"),args.requiredString("name"),args.optionalPositiveInt("page")?:1)
+  "github_contribute_fork"->githubContribution().forkRepository(args.requiredString("owner"),args.requiredString("repo"),args.requiredString("confirmationId"))
+  "github_contribute_branch"->githubContribution().createBranch(args.requiredString("progress"),args.requiredString("branch"),args.requiredString("confirmationId"))
+  "github_contribute_write"->githubContribution().writeFile(args.requiredString("progress"),args.requiredString("path"),args.requiredString("content"),args.requiredString("commitMessage"),args.requiredString("confirmationId"))
+  "github_contribute_pr"->githubContribution().createPullRequest(args.requiredString("progress"),args.requiredString("title"),args.requiredString("body"),args.optionalBoolean("draft")?:false,args.requiredString("confirmationId"))
   else->error("不允许执行工具 $name")
  }
  private fun JsonObject.requiredString(name:String)=optionalString(name)?.takeIf{it.isNotBlank()}?:error("参数 $name 必须是非空字符串")
