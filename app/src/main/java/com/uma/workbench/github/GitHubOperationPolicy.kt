@@ -1,8 +1,17 @@
 package com.uma.workbench.github
 
-class GitHubOperationPolicy {
-    fun requireConfirmation(operation: String, confirmationId: String?) {
-        require(!confirmationId.isNullOrBlank()) { "远程操作必须先完成明确确认：$operation" }
+class GitHubOperationPolicy(
+    private val confirmationStore: GitHubConfirmationStore? = null
+) {
+    fun requireConfirmation(operation: GitHubRemoteOperation, description: String, confirmationId: String?) {
+        if (confirmationStore == null) {
+            require(!confirmationId.isNullOrBlank()) { "远程操作必须先完成明确确认：$description" }
+            return
+        }
+        val result = confirmationStore.consume(confirmationId ?: "", operation)
+        require(result == GitHubConfirmationStore.ConsumeResult.OK) {
+            "授权令牌无效（${result.name}），操作被拒绝：$description。请在 UI 重新发放授权令牌"
+        }
     }
 
     fun validateVisibilityTarget(target: RepositoryVisibility) {

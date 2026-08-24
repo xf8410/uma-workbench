@@ -24,7 +24,7 @@ class GitHubContributionGatewayImpl(
     private val json = Json { ignoreUnknownKeys = true }
 
     override suspend fun fork(owner: String, repo: String, confirmationId: String?): GitHubForkResult {
-        policy.requireConfirmation("创建 Fork $owner/$repo", confirmationId)
+        policy.requireConfirmation(GitHubRemoteOperation.FORK, "创建 Fork $owner/$repo", confirmationId)
         val upstream = request("POST", "/repos/$owner/$repo/forks", "{}")
         val forkOwner = requiredObject(upstream, "owner").let { required(it, "login") }
         val forkRepo = required(upstream, "name")
@@ -39,7 +39,7 @@ class GitHubContributionGatewayImpl(
     }
 
     override suspend fun createWorkbenchBranch(binding: GitHubForkBinding, branch: String, confirmationId: String?): GitHubContributionBranch {
-        policy.requireConfirmation("创建分支 ${binding.forkOwner}/${binding.forkRepo}:$branch", confirmationId)
+        policy.requireConfirmation(GitHubRemoteOperation.BRANCH, "创建分支 ${binding.forkOwner}/${binding.forkRepo}:$branch", confirmationId)
         require(branch.startsWith("workbench/")) { "贡献分支必须使用 workbench/* 前缀" }
         val base = request("GET", "/repos/${binding.forkOwner}/${binding.forkRepo}/git/ref/heads/${branchName(binding.forkDefaultBranch)}")
         val sha = required(requiredObject(base, "object"), "sha")
@@ -51,7 +51,7 @@ class GitHubContributionGatewayImpl(
     }
 
     override suspend fun writeFile(binding: GitHubForkBinding, branch: String, change: GitHubFileChange, commitMessage: String, confirmationId: String?): GitRef {
-        policy.requireConfirmation("写入 Fork 文件 ${binding.forkOwner}/${binding.forkRepo}:${change.path}", confirmationId)
+        policy.requireConfirmation(GitHubRemoteOperation.WRITE, "写入 Fork 文件 ${binding.forkOwner}/${binding.forkRepo}:${change.path}", confirmationId)
         require(branch.startsWith("workbench/")) { "贡献分支必须使用 workbench/* 前缀" }
         val existing = runCatching {
             request("GET", "/repos/${binding.forkOwner}/${binding.forkRepo}/contents/${path(change.path)}?ref=${path(branch)}")
@@ -67,7 +67,7 @@ class GitHubContributionGatewayImpl(
     }
 
     override suspend fun createCrossForkPullRequest(req: GitHubCrossForkPullRequestRequest): GitHubContributionPullRequest {
-        policy.requireConfirmation("向 ${req.binding.upstreamOwner}/${req.binding.upstreamRepo} 创建 Pull Request", req.confirmationId)
+        policy.requireConfirmation(GitHubRemoteOperation.PULL_REQUEST, "向 ${req.binding.upstreamOwner}/${req.binding.upstreamRepo} 创建 Pull Request", req.confirmationId)
         GitHubContributionPolicy.validateTarget(req)
         val payload = buildJsonObject {
             put("title", req.title)

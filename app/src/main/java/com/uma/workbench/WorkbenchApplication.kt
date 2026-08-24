@@ -34,6 +34,9 @@ class WorkbenchApplication : Application() {
         private set
     lateinit var githubReadonlyAgentSource: GitHubReadonlyAgentToolDataSource
     lateinit var githubContributionAgentSource: GitHubContributionAgentToolDataSource
+
+    /** GitHub 远程操作一次性授权令牌库（UI 发放，Agent 工具消耗）。 */
+    val githubConfirmationStore = com.uma.workbench.github.GitHubConfirmationStore()
     lateinit var githubCloneAgentSource: GitHubCloneAgentToolDataSource
         private set
     lateinit var agentPartnerStore: AgentPartnerStore
@@ -52,7 +55,7 @@ class WorkbenchApplication : Application() {
         sourceImporter = SourceImporter(contentResolver)
         workScheduler = WorkScheduler(this)
         githubReadonlyAgentSource = AndroidGitHubReadonlyAgentToolDataSource(this)
-        githubContributionAgentSource = AndroidGitHubContributionAgentToolDataSource(this)
+        githubContributionAgentSource = AndroidGitHubContributionAgentToolDataSource(this, githubConfirmationStore)
         githubCloneAgentSource = AndroidGitHubCloneAgentToolDataSource(this, database) { ActiveWorkspaceBridge.workspaceId.value }
         agentPartnerStore = AgentPartnerStore(AgentPartnerDatabase.get(this))
     }

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -29,6 +30,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.font.FontFamily
+import com.uma.workbench.WorkbenchApplication
+import com.uma.workbench.github.GitHubConfirmationStore
+import com.uma.workbench.github.GitHubRemoteOperation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -58,6 +63,7 @@ fun AgentPartnerPanel(
     onDismiss: () -> Unit
 ) {
     viewModel.setWorkspace(workspaceId)
+    val context = androidx.compose.ui.platform.LocalContext.current
     val profiles by viewModel.profiles.collectAsStateWithLifecycle()
     val groups by viewModel.groups.collectAsStateWithLifecycle()
     val selectedGroup by viewModel.selectedGroup.collectAsStateWithLifecycle()
@@ -67,6 +73,10 @@ fun AgentPartnerPanel(
     var creatingGroup by remember { mutableStateOf(false) }
     var editingGroupSettings by remember { mutableStateOf(false) }
 
+    val authorization = remember {
+        val app = context.applicationContext as WorkbenchApplication
+        GitHubAuthorizationController(app.githubConfirmationStore)
+    }
     if (selectedGroup != null) {
         AgentGroupChatDialog(
             groupName = selectedGroup!!.name,
@@ -76,6 +86,7 @@ fun AgentPartnerPanel(
             onCancel = viewModel::cancelGroupGeneration,
             onRetry = viewModel::retryFailedMessage,
             onSettings = { editingGroupSettings = true },
+            authorization = authorization,
             onDismiss = { viewModel.selectGroup(null) }
         )
     } else {
@@ -181,10 +192,26 @@ private fun AgentGroupChatDialog(
     onCancel: () -> Unit,
     onRetry: (String) -> Unit,
     onSettings: () -> Unit,
+    authorization: GitHubAuthorizationController,
     onDismiss: () -> Unit
 ) {
     var input by remember { mutableStateOf("") }
+    var showingAuthorization by remember { mutableStateOf(false) }
     val isGenerating = generationState is AgentGenerationState.Generating
+    if (showingAuthorization) {
+        GitHubAuthorizationDialog(
+            controller = authorization,
+            onIssued = { token ->
+                showingAuthorization = false
+                onSend(
+                    "[GitHub授权] 已发放贡献流一次性令牌：$token " +
+                        "（10分钟内有效；fork/分支/PR 各一次，文件提交最多8次，PR 创建后整张令牌自动作废）。" +
+                        "Agent：将此令牌作为 github_contribute_fork / github_contribute_branch / github_contribute_write / github_contribute_pr 的 confirmationId 参数。"
+                )
+            },
+            onDismiss = { showingAuthorization = false }
+        )
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = { TextButton(onClick = onDismiss) { Text("返回") } },
@@ -202,6 +229,9 @@ private fun AgentGroupChatDialog(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text("生成中", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                }
+                IconButton(onClick = { showingAuthorization = true }, modifier = Modifier.size(28.dp)) {
+                    Text("🔑", fontSize = 16.sp)
                 }
                 IconButton(onClick = onSettings, modifier = Modifier.size(28.dp)) {
                     Text("⚙", fontSize = 18.sp)
@@ -698,3 +728,79 @@ private fun AddMemberDialog(
     )
 }
 
+
+/** GitHub 远程操作授权控制器：包一层 store 供 Compose 使用。 */
+class GitHubAuthorizationController(private val store: GitHubConfirmationStore) {
+    fun issueContributionFlowToken(description: String): String =
+        store.issue(
+            operations = GitHubConfirmationStore.CONTRIBUTION_FLOW,
+            description = description,
+            ttlMillis = GitHubConfirmationStore.DEFAULT_TTL_MILLIS
+        )
+
+    fun listActive(): List<GitHubConfirmationStore.ConfirmationToken> = store.listActive()
+
+    fun revoke(id: String): Boolean = store.revoke(id)
+}
+
+@Composable
+private fun GitHubAuthorizationDialog(
+    controller: GitHubAuthorizationController,
+    onIssued: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var refresh by remember { mutableStateOf(0) }
+    val tokens = remember(refresh) { controller.listActive() }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = {
+                val token = controller.issueContributionFlowToken("群聊会话发放")
+                onIssued(token)
+            }) { Text("授权完整贡献流") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("关闭") } },
+        title = { Text("GitHub 远程操作授权") },
+        text = {
+            Column(Modifier.fillMaxWidth()) {
+                Text(
+                    "发放一次性令牌后，令牌会作为消息发进群聊，Agent 用它作为 github_contribute_* 工具的 confirmationId。" +
+                        "有效期 10 分钟；fork/分支/PR 各限一次，文件提交最多 8 次；PR 创建成功后整张令牌立即作废。",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+                Spacer(Modifier.height(12.dp))
+                if (tokens.isEmpty()) {
+                    Text("当前没有有效令牌", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                } else {
+                    Text("有效令牌 ${tokens.size} 张", fontSize = 13.sp)
+                    Spacer(Modifier.height(4.dp))
+                    LazyColumn(Modifier.fillMaxWidth().heightIn(max = 200.dp)) {
+                        items(tokens, key = { it.id }) { token ->
+                            Row(
+                                Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        token.id,
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 13.sp
+                                    )
+                                    Text(
+                                        "剩余 ${token.remainingUsesPublic} 次 · ${token.operations.joinToString("/") { it.name.lowercase() }}",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                    )
+                                }
+                                TextButton(onClick = { controller.revoke(token.id); refresh++ }) {
+                                    Text("撤销", fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    )
+}

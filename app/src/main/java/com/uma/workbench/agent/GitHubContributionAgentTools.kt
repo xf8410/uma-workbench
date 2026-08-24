@@ -2,7 +2,9 @@ package com.uma.workbench.agent
 
 import android.content.Context
 import com.uma.workbench.github.GitHubContributionBranch
+import com.uma.workbench.github.GitHubConfirmationStore
 import com.uma.workbench.github.GitHubContributionGatewayImpl
+import com.uma.workbench.github.GitHubOperationPolicy
 import com.uma.workbench.github.GitHubContributionPullRequest
 import com.uma.workbench.github.GitHubContributionProgress
 import com.uma.workbench.github.GitHubContributionWorkflow
@@ -213,7 +215,8 @@ internal object GitHubContributionToolRenderer {
 
 /** 生产实现：token 存取与 gateway 组装。 */
 class AndroidGitHubContributionAgentToolDataSource(
-    context: Context
+    context: Context,
+    private val confirmationStore: GitHubConfirmationStore? = null
 ) : GitHubContributionAgentToolDataSource {
 
     private val credentials = GitHubCredentialStore(context)
@@ -221,7 +224,12 @@ class AndroidGitHubContributionAgentToolDataSource(
     private fun workflow(): GitHubContributionWorkflow {
         val token = credentials.loadToken()
         check(token.isNotEmpty()) { "GitHub 未登录，请先打开 GitHub 仓库入口完成登录" }
-        return GitHubContributionWorkflow(GitHubContributionGatewayImpl(token))
+        return GitHubContributionWorkflow(
+            GitHubContributionGatewayImpl(
+                token,
+                policy = GitHubOperationPolicy(confirmationStore)
+            )
+        )
     }
 
     override suspend fun forkRepository(owner: String, repo: String, confirmationId: String): String {
