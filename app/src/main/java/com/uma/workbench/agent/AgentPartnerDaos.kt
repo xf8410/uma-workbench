@@ -58,3 +58,52 @@ interface AgentGroupDao {
     @Query("SELECT g.* FROM agent_groups g INNER JOIN agent_group_members m ON g.id = m.groupId WHERE m.agentId = :agentId")
     suspend fun groupsContainingMember(agentId: String): List<AgentGroupEntity>
 }
+
+@Dao
+interface AgentRunDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entity: AgentRunEntity)
+
+    @Query("SELECT * FROM agent_runs WHERE id = :id LIMIT 1")
+    suspend fun get(id: String): AgentRunEntity?
+
+    @Query("SELECT * FROM agent_runs WHERE conversationId = :convId ORDER BY startedAt DESC")
+    suspend fun listByConversation(convId: String): List<AgentRunEntity>
+
+    @Query("UPDATE agent_runs SET status = :status, completedAt = :completedAt, error = :error WHERE id = :id")
+    suspend fun updateStatus(id: String, status: String, completedAt: Long?, error: String?)
+
+    @Query("UPDATE agent_runs SET inputTokens = :input, outputTokens = :output, totalTokens = :total, roundsCount = :rounds, toolCallsCount = :toolCalls WHERE id = :id")
+    suspend fun updateStats(
+        id: String,
+        input: Long,
+        output: Long,
+        total: Long,
+        rounds: Int,
+        toolCalls: Int
+    )
+}
+
+@Dao
+interface AgentToolCallRecordDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entity: AgentToolCallRecordEntity)
+
+    @Query("SELECT * FROM agent_tool_call_records WHERE runId = :runId ORDER BY roundIndex ASC, timestamp ASC")
+    suspend fun listByRun(runId: String): List<AgentToolCallRecordEntity>
+
+    @Query("SELECT COUNT(*) FROM agent_tool_call_records WHERE runId = :runId AND status = :status")
+    suspend fun countByStatus(runId: String, status: String): Int
+}
+
+@Dao
+interface AgentToolApprovalRecordDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entity: AgentToolApprovalRecordEntity)
+
+    @Query("SELECT * FROM agent_tool_approval_records WHERE runId = :runId ORDER BY timestamp ASC")
+    suspend fun listByRun(runId: String): List<AgentToolApprovalRecordEntity>
+
+    @Query("SELECT COUNT(*) FROM agent_tool_approval_records WHERE runId = :runId AND approved = 1")
+    suspend fun countApproved(runId: String): Int
+}

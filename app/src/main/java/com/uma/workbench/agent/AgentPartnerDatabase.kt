@@ -12,15 +12,21 @@ import androidx.room.RoomDatabase
         AgentGroupEntity::class,
         AgentGroupMemberEntity::class,
         AgentGroupMessageEntity::class,
-        AgentGroupContextSourceEntity::class
+        AgentGroupContextSourceEntity::class,
+        AgentRunEntity::class,
+        AgentToolCallRecordEntity::class,
+        AgentToolApprovalRecordEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AgentPartnerDatabase : RoomDatabase() {
     abstract fun profiles(): AgentProfileDao
     abstract fun diaries(): AgentDiaryDao
     abstract fun groups(): AgentGroupDao
+    abstract fun agentRuns(): AgentRunDao
+    abstract fun toolCallRecords(): AgentToolCallRecordDao
+    abstract fun toolApprovalRecords(): AgentToolApprovalRecordDao
 
     companion object {
         @Volatile

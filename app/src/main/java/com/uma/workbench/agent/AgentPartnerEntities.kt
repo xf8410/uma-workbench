@@ -85,3 +85,51 @@ data class AgentGroupContextSourceEntity(
     val sourceRef: String,
     val importedAt: Long
 )
+
+// ── Agent Run 持久化（LOCAL_AGENT_TODO）──
+
+@Entity(tableName = "agent_runs", indices = [Index("conversationId")])
+data class AgentRunEntity(
+    @androidx.room.PrimaryKey val id: String,
+    val conversationId: String,
+    val providerId: String,
+    val tier: String,
+    val startedAt: Long,
+    val completedAt: Long?,
+    val status: String,
+    val model: String?,
+    val inputTokens: Long,
+    val outputTokens: Long,
+    val totalTokens: Long,
+    val roundsCount: Int,
+    val toolCallsCount: Int,
+    val error: String?
+)
+
+@Entity(tableName = "agent_tool_call_records", indices = [Index("runId")])
+data class AgentToolCallRecordEntity(
+    @androidx.room.PrimaryKey val id: String,
+    val runId: String,
+    val roundIndex: Int,
+    val callId: String,
+    val toolName: String,
+    val argumentsJson: String,
+    val status: String,
+    val resultId: String?,
+    val error: String?,
+    val elapsedMillis: Long,
+    val approved: Boolean,
+    val timestamp: Long
+)
+
+@Entity(tableName = "agent_tool_approval_records", indices = [Index("runId")])
+data class AgentToolApprovalRecordEntity(
+    @androidx.room.PrimaryKey val id: String,
+    val runId: String,
+    val callId: String,
+    val toolName: String,
+    val riskLevel: String,
+    val approved: Boolean,
+    val reason: String?,
+    val timestamp: Long
+)
