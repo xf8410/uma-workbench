@@ -89,8 +89,13 @@ class ModelOutputVerifierTest {
 
     @Test
     fun longAnswerNoToolCalls_returnsUnverified() {
-        val longAnswer = "这是一个很长的回答，超过了80个字符的阈值，" +
-            "但是没有调用任何工具来验证内容，应该被标记为未验证。"
+        val longAnswer = "这是一个很长的回答，" +
+            "超过了八十个字符的阈值限制，" +
+            "但是没有调用任何工具来验证内容，" +
+            "因此应该被标记为未验证状态，" +
+            "而不是简短回复或已验证状态。" +
+            "模型不应该在不查阅任何文件或数据的情况下，" +
+            "就生成如此长的回答，这表示输出可能缺乏证据支撑。"
         val result = makeRunResult(
             answer = longAnswer,
             rounds = listOf(makeRound(index = 1, assistantText = longAnswer))
