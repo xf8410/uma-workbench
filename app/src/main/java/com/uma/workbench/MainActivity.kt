@@ -50,6 +50,7 @@ class MainActivity : ComponentActivity() {
 fun WorkbenchApp(
     vm: MainViewModel = viewModel(),
     aiConfigVm: AiConfigurationViewModel = viewModel(),
+    lanModelVm: LanModelViewModel = viewModel(),
     aiChatVm: AiChatViewModel = viewModel(),
     agentPartnerVm: AgentPartnerViewModel = viewModel()
 ) {
@@ -58,7 +59,7 @@ fun WorkbenchApp(
     val networkState by vm.networkState.collectAsStateWithLifecycle()
     val hlpatchState by vm.hlpatchState.collectAsStateWithLifecycle()
     if (currentWs == null) WorkspacePicker(workspaces, vm)
-    else TraeLayout(vm, aiConfigVm, aiChatVm, agentPartnerVm, currentWs!!, networkState, hlpatchState)
+    else TraeLayout(vm, aiConfigVm, lanModelVm, aiChatVm, agentPartnerVm, currentWs!!, networkState, hlpatchState)
 }
 
 @Composable
@@ -108,6 +109,7 @@ private fun WorkspacePicker(workspaces: List<WorkspaceEntity>, vm: MainViewModel
 private fun TraeLayout(
     vm: MainViewModel,
     aiConfigVm: AiConfigurationViewModel,
+    lanModelVm: LanModelViewModel,
     aiChatVm: AiChatViewModel,
     agentPartnerVm: AgentPartnerViewModel,
     ws: WorkspaceEntity,
@@ -154,7 +156,7 @@ private fun TraeLayout(
                 Column(Modifier.weight(1f)) {
                     when (activeBottomTab) {
                         4 -> AiChatScreen(aiChatVm) { activeBottomTab = 5 }
-                        5 -> AiConfigurationScreen(aiConfigVm)
+                        5 -> AiConfigurationScreen(aiConfigVm, lanModelVm)
                         6 -> AgentPartnerPanel(agentPartnerVm, ws.id) { activeBottomTab = 0 }
                         else -> {
                             if (openTabs.isNotEmpty()) Row(Modifier.fillMaxWidth().height(32.dp).horizontalScroll(rememberScrollState())) {
