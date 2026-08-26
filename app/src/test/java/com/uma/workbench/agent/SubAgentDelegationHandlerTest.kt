@@ -22,7 +22,7 @@ class SubAgentDelegationHandlerTest {
   val delegation=(result.rounds.first().toolOutcomes.single()as AgentToolOutcome.Success).result
   val manifest=Json.parseToJsonElement(delegation.content).jsonObject;assertEquals("sub_agent_report_manifest",manifest["type"]!!.jsonPrimitive.content);assertFalse(delegation.content.contains("\"answer\":\"child report\""));assertTrue(delegation.content.contains("\"preview\":\"child report\""))
   val complete=store.read(delegation.resultId,0,delegation.totalCharacterCount);val report=Json.parseToJsonElement(complete.content).jsonObject["reports"]!!.jsonArray.single().jsonObject;assertEquals("child report",report["answer"]!!.jsonPrimitive.content);assertEquals("read_current_file",report["evidence"]!!.jsonArray.single().jsonObject["tool"]!!.jsonPrimitive.content);assertTrue(complete.complete)
-  assertEquals(ReadonlyAgentToolSchemas.childReadOnly,childTools);assertFalse(childTools.toString().contains("delegate_subagents"))
+  assertEquals(ReadonlyAgentToolSchemas.childInvestigation,childTools);assertFalse(childTools.toString().contains("delegate_subagents"))
  }
 
  @Test fun invalidUnknownTaskPropertyBecomesVisibleToolFailure()=runBlocking{
