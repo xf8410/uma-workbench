@@ -133,4 +133,34 @@ class AgentModeTest {
         assertFalse(transition.requiresConfirmation)
         assertNull(transition.warningMessage())
     }
+
+    @Test
+    fun systemPromptFragment_containsModeInfo() {
+        val fragment = AgentMode.ASK.systemPromptFragment()
+        assertTrue("应包含 [agent_mode] 标记", fragment.contains("[agent_mode]"))
+        assertTrue("应包含模式名", fragment.contains("ASK"))
+        assertTrue("应包含模式标签", fragment.contains("询问"))
+        assertTrue("应包含 capabilities", fragment.contains("capabilities"))
+        assertTrue("应包含只读工具 allowed", fragment.contains("read_only_tools: allowed"))
+        assertTrue("应包含本地写入 denied", fragment.contains("local_write_tools: denied"))
+        assertTrue("应包含远程写入 denied", fragment.contains("remote_write_tools: denied"))
+        assertTrue("应包含 instruction", fragment.contains("instruction"))
+        assertTrue("应以 [/agent_mode] 结尾", fragment.contains("[/agent_mode]"))
+    }
+
+    @Test
+    fun systemPromptFragment_actModeIncludesApprovalInfo() {
+        val fragment = AgentMode.ACT.systemPromptFragment()
+        assertTrue("ACT 模式应允许本地写入", fragment.contains("local_write_tools: allowed"))
+        assertTrue("ACT 模式应允许远程写入", fragment.contains("remote_write_tools: allowed"))
+        assertTrue("ACT 模式应声明审批要求", fragment.contains("write_operations_require_user_approval"))
+    }
+
+    @Test
+    fun systemPromptFragment_observeModeDeniesWrites() {
+        val fragment = AgentMode.OBSERVE.systemPromptFragment()
+        assertTrue("OBSERVE 应拒绝本地写入", fragment.contains("local_write_tools: denied"))
+        assertTrue("OBSERVE 应拒绝远程写入", fragment.contains("remote_write_tools: denied"))
+        assertFalse("OBSERVE 不应包含审批信息", fragment.contains("approval:"))
+    }
 }

@@ -10,7 +10,9 @@ import java.io.File
 class AgentGroupReplyRunnerImpl(
     private val provider: AiStreamingProvider,
     private val source: ReadonlyAgentToolDataSource,
-    private val filesDir: File
+    private val filesDir: File,
+    private val approvalGate: ToolApprovalGate? = null,
+    private val modeProvider: () -> AgentMode = { AgentMode.ASK }
 ) : AgentGroupReplyRunner {
 
     override suspend fun run(
@@ -26,13 +28,16 @@ class AgentGroupReplyRunnerImpl(
         val loop = ReadonlyAgentRuntimeFactory(
             provider = provider,
             source = source,
-            resultStore = resultStore
+            resultStore = resultStore,
+            approvalGate = approvalGate,
+            modeProvider = modeProvider
         ).createRootLoop()
 
         val userQuestion = extractUserQuestion(prompt)
         val systemPrompt = prompt.substringBefore("[user_message]").trimEnd()
+        val modeContext = modeProvider().systemPromptFragment()
         val messages = listOf(
-            AiPromptMessage("system", systemPrompt),
+            AiPromptMessage("system", "$systemPrompt\n\n$modeContext"),
             AiPromptMessage("user", userQuestion)
         )
         val request = AiGenerationRequest(

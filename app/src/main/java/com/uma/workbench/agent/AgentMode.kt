@@ -78,6 +78,31 @@ enum class AgentMode(
         }
     }
 
+    /**
+     * Generates a system-prompt fragment describing the current mode's capabilities.
+     * Injected into the agent's system message so it knows what it can and cannot do,
+     * avoiding wasted rounds on tools that will be rejected (feature 259).
+     */
+    fun systemPromptFragment(): String = buildString {
+        appendLine("[agent_mode]")
+        appendLine("current_mode=$storageKey ($label)")
+        appendLine("description=$description")
+        appendLine("capabilities:")
+        appendLine("  read_only_tools: ${if (canRead) "allowed" else "denied"}")
+        appendLine("  local_write_tools: ${if (canWriteLocally) "allowed" else "denied"}")
+        appendLine("  remote_write_tools: ${if (canWriteRemotely) "allowed" else "denied"}")
+        appendLine("  destructive_tools: always_denied")
+        if (canWriteLocally || canWriteRemotely) {
+            if (requiresApprovalForWrite) {
+                appendLine("  approval: write_operations_require_user_approval")
+            } else {
+                appendLine("  approval: auto")
+            }
+        }
+        appendLine("instruction: Do not attempt operations your current mode denies; they will be rejected. If the user needs a denied capability, suggest switching to a more permissive mode.")
+        appendLine("[/agent_mode]")
+    }
+
     companion object {
         fun fromStorageKey(key: String?): AgentMode =
             entries.firstOrNull { it.storageKey == key } ?: ASK

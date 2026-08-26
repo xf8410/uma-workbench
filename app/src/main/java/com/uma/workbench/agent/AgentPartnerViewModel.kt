@@ -71,7 +71,9 @@ class AgentPartnerViewModel(application: Application) : AndroidViewModel(applica
                         app, app.database, workspaceId.value ?: "",
                         { ActiveWorkspaceDocumentBridge.document.value?.takeIf { it.workspaceId == (workspaceId.value ?: "") } }
                     ),
-                    filesDir = app.filesDir
+                    filesDir = app.filesDir,
+                    approvalGate = app.toolApprovalGate,
+                    modeProvider = { ActiveModeBridge.mode.value }
                 )
                 // Determine decision: use Manager Agent for MANAGER_SELECTS, otherwise rule-based
                 val decision = if (group.turnPolicy == AgentGroupPolicy.MANAGER_SELECTS && requestedAgentIds.isEmpty()) {
@@ -311,7 +313,9 @@ class AgentPartnerViewModel(application: Application) : AndroidViewModel(applica
                         app, app.database, workspaceId.value ?: "",
                         { ActiveWorkspaceDocumentBridge.document.value?.takeIf { it.workspaceId == (workspaceId.value ?: "") } }
                     ),
-                    filesDir = app.filesDir
+                    filesDir = app.filesDir,
+                    approvalGate = app.toolApprovalGate,
+                    modeProvider = { ActiveModeBridge.mode.value }
                 )
                 val prompt = buildRetryPrompt(profile, group, recentMessages, message.content)
                 try {

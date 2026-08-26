@@ -902,7 +902,7 @@ private fun GitHubAuthorizationDialog(
 }
 
 @Composable
-private fun ToolApprovalDialog(approvalGate: com.uma.workbench.agent.UiToolApprovalGate) {
+internal fun ToolApprovalDialog(approvalGate: com.uma.workbench.agent.UiToolApprovalGate) {
     val pending = approvalGate.pending.collectAsStateWithLifecycle().value
     val current = pending.firstOrNull() ?: return
     var customReason by remember(current.request.callId) { mutableStateOf("") }
