@@ -37,6 +37,16 @@ class ReadonlyAgentToolSchemasTest {
         assertTrue(names.containsAll(contributionNames))
     }
 
+    @Test fun childInvestigationSchemaAddsCloneOnly() {
+        val names = names(ReadonlyAgentToolSchemas.childInvestigation)
+        val childNames = names(ReadonlyAgentToolSchemas.childReadOnly)
+        // 调查型子 Agent = 工作区只读 + 克隆，不多不少
+        assertEquals(childNames + setOf("github_clone_repository"), names)
+        assertFalse("delegate_subagents" in names)
+        assertFalse(names.any { it in contributionNames })
+        assertFalse(names.any { it in githubNames })
+    }
+
     @Test fun childSchemaExcludesDelegationAndGitHubQuotaTools() {
         val names = names(ReadonlyAgentToolSchemas.childReadOnly)
         assertFalse("delegate_subagents" in names)

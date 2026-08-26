@@ -24,7 +24,7 @@ class SubAgentCoordinator(private val loopFactory:SubAgentLoopFactory,private va
  }
  private suspend fun execute(parent:AiGenerationRequest,task:SubAgentTask,depth:Int):SubAgentOutcome{
   val requestId=requestIdFactory();val messages=buildList{addAll(parent.messages.filter{it.role=="system"});add(AiPromptMessage("system",policy(depth)));add(AiPromptMessage("user",prompt(task)))}
-  return try{val run=loopFactory.create().run(parent.copy(requestId=requestId,messages=messages,tools=ReadonlyAgentToolSchemas.childReadOnly));SubAgentOutcome.Success(SubAgentResult(task.id,requestId,run.completeAnswer,run.rounds,run.usage,run.model))}catch(c:CancellationException){throw c}catch(e:Throwable){SubAgentOutcome.Failure(SubAgentFailure(task.id,e.stackTraceToString()))}
+  return try{val run=loopFactory.create().run(parent.copy(requestId=requestId,messages=messages,tools=ReadonlyAgentToolSchemas.childInvestigation));SubAgentOutcome.Success(SubAgentResult(task.id,requestId,run.completeAnswer,run.rounds,run.usage,run.model))}catch(c:CancellationException){throw c}catch(e:Throwable){SubAgentOutcome.Failure(SubAgentFailure(task.id,e.stackTraceToString()))}
  }
  private fun policy(depth:Int)="""你是只读证据调查子 Agent，当前深度为 $depth。
 只完成分配给你的单一任务，不扩展用户目标，不执行写入、发布、删除或凭据操作。

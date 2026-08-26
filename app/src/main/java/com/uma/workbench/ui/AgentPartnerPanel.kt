@@ -2,6 +2,7 @@ package com.uma.workbench.ui
 
 import androidx.compose.animation.animateColorAsState
 import androidx.core.content.edit
+import com.uma.workbench.ui.theme.WorkbenchColors
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -455,6 +456,14 @@ private fun GroupMessageItem(
                                     fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
+                                contributionStepBadge(tc.tool)?.let { step ->
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        step,
+                                        fontSize = 10.sp,
+                                        color = WorkbenchColors.accent,
+                                    )
+                                }
                                 Spacer(Modifier.width(6.dp))
                                 Text(
                                     if (tc.status == "ok") "✅" else "❌",
@@ -516,6 +525,15 @@ private fun parseUsageSummary(usageJson: String?): String {
 }
 
 private data class ToolCallInfo(val tool: String, val status: String, val args: String)
+
+/** 贡献流工具的步骤徽章：显示当前处于四步中的第几步。 */
+private fun contributionStepBadge(tool: String): String? = when (tool) {
+    "github_contribute_fork" -> "▍进度 1/4"
+    "github_contribute_branch" -> "▍进度 2/4"
+    "github_contribute_write" -> "▍进度 3/4"
+    "github_contribute_pr" -> "▍进度 4/4"
+    else -> null
+}
 
 /** 把工具内部名映射为中文展示名，方便用户在群聊里看懂。 */
 private fun toolDisplayName(tool: String): String = when (tool) {
@@ -840,7 +858,7 @@ class GitHubAuthorizationController(private val store: GitHubConfirmationStore) 
 }
 
 @Composable
-private fun GitHubAuthorizationDialog(
+internal fun GitHubAuthorizationDialog(
     controller: GitHubAuthorizationController,
     onIssued: (String) -> Unit,
     onDismiss: () -> Unit

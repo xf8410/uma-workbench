@@ -11,11 +11,18 @@ object ReadonlyAgentToolSchemas {
     /** Children stay workspace-local and cannot recursively delegate or consume GitHub API quota. */
     val childReadOnly: JsonArray = buildJsonArray { addWorkspaceReadOnlyTools() }
 
+    /** 调查型子 Agent：工作区只读 + 克隆（克隆受审批门约束）。 */
+    val childInvestigation: JsonArray = buildJsonArray {
+        addWorkspaceReadOnlyTools()
+        addGitHubCloneTools()
+    }
+
     /** GitHub tools are initially visible only to the root Agent. */
     val openAiCompatible: JsonArray = buildJsonArray {
         addWorkspaceReadOnlyTools()
         addGitHubReadOnlyTools()
         addGitHubContributionTools()
+        addGitHubCloneTools()
         add(buildJsonObject {
             put("type", "function")
             put("function", buildJsonObject {
@@ -123,17 +130,21 @@ object ReadonlyAgentToolSchemas {
             required = listOf("progress", "path", "content", "commitMessage", "confirmationId")
         )
         function(
-            "github_clone_repository",
-            "把 GitHub 仓库完整克隆到本地工作区（下载 tarball 并解包）。克隆后用 list_workspace_files 列出全部文件，read_file/search_workspace 直接读取。ref 留空用默认分支",
-            strings = listOf("owner", "repo", "ref"),
-            required = listOf("owner", "repo")
-        )
-        function(
             "github_contribute_pr",
             "GitHub 贡献流第4步：从 fork 分支向上游仓库发起跨 fork PR。progress 传上一步返回的 JSON；要求至少已提交一个文件",
             strings = listOf("progress", "title", "body", "confirmationId"),
             booleans = listOf("draft"),
             required = listOf("progress", "title", "body", "confirmationId")
+        )
+    }
+
+    /** 克隆工具：本地写性质，主 Agent 与调查型子 Agent 都可用。 */
+    private fun JsonArrayBuilder.addGitHubCloneTools() {
+        function(
+            "github_clone_repository",
+            "把 GitHub 仓库完整克隆到本地工作区（下载 tarball 并解包）。克隆后用 list_workspace_files 列出全部文件，read_file/search_workspace 直接读取。ref 留空用默认分支",
+            strings = listOf("owner", "repo", "ref"),
+            required = listOf("owner", "repo")
         )
     }
 

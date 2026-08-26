@@ -66,9 +66,23 @@ class ReadonlyAgentRuntimeFactory(
         }
     }
 
-    private fun createChildExecutor() = ReadonlyAgentToolExecutor(
-        source = source,
-        limits = toolLimits,
-        resultStore = resultStore
-    )
+    private fun createChildExecutor(): AgentToolExecutor {
+        val base = ReadonlyAgentToolExecutor(
+            source = source,
+            limits = toolLimits,
+            resultStore = resultStore,
+            githubCloneSource = githubCloneSource
+        )
+        // 子 Agent 与主 Agent 走同一审批门与模式矩阵：不接 gate 就是绕过审批的旁路
+        return if (approvalGate != null) {
+            ApprovableToolExecutor(
+                delegate = base,
+                gate = approvalGate,
+                registry = toolCapabilityRegistry,
+                mode = modeProvider
+            )
+        } else {
+            base
+        }
+    }
 }
