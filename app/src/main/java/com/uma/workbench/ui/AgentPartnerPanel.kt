@@ -219,7 +219,30 @@ private fun AgentGroupChatDialog(
 ) {
     var input by remember { mutableStateOf("") }
     var showingAuthorization by remember { mutableStateOf(false) }
+    var pendingModeTransition by remember { mutableStateOf<com.uma.workbench.agent.ModeTransition?>(null) }
     val isGenerating = generationState is AgentGenerationState.Generating
+    pendingModeTransition?.let { transition ->
+        val warning = transition.warningMessage()
+        if (warning != null) {
+            AlertDialog(
+                onDismissRequest = { pendingModeTransition = null },
+                confirmButton = {
+                    Button(onClick = {
+                        onModeChange(transition.to)
+                        pendingModeTransition = null
+                    }) { Text("确认切换") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingModeTransition = null }) { Text("取消") }
+                },
+                title = { Text("切换 Agent 模式") },
+                text = { Text(warning) }
+            )
+        } else {
+            onModeChange(transition.to)
+            pendingModeTransition = null
+        }
+    }
     if (showingAuthorization) {
         GitHubAuthorizationDialog(
             controller = authorization,
@@ -254,6 +277,7 @@ private fun AgentGroupChatDialog(
                 }
                 var modeMenuExpanded by remember { mutableStateOf(false) }
                 Box {
+                    Text(currentMode.label, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f), fontSize = 12.sp)
                     IconButton(onClick = { modeMenuExpanded = true }, modifier = Modifier.size(28.dp)) {
                         Text("🎛", fontSize = 16.sp)
                     }
@@ -263,7 +287,12 @@ private fun AgentGroupChatDialog(
                                 text = { Text("${mode.label}（${mode.description.take(20)}）") },
                                 onClick = {
                                     modeMenuExpanded = false
-                                    onModeChange(mode)
+                                    val transition = com.uma.workbench.agent.ModeTransition(currentMode, mode)
+                                    if (transition.requiresConfirmation) {
+                                        pendingModeTransition = transition
+                                    } else {
+                                        onModeChange(mode)
+                                    }
                                 }
                             )
                         }
