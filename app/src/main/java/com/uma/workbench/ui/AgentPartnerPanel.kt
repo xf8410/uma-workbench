@@ -64,6 +64,7 @@ fun AgentPartnerPanel(
 ) {
     viewModel.setWorkspace(workspaceId)
     val context = androidx.compose.ui.platform.LocalContext.current
+    val app = context.applicationContext as WorkbenchApplication
     val profiles by viewModel.profiles.collectAsStateWithLifecycle()
     val groups by viewModel.groups.collectAsStateWithLifecycle()
     val selectedGroup by viewModel.selectedGroup.collectAsStateWithLifecycle()
@@ -77,6 +78,17 @@ fun AgentPartnerPanel(
         val app = context.applicationContext as WorkbenchApplication
         GitHubAuthorizationController(app.githubConfirmationStore)
     }
+    val currentMode by com.uma.workbench.agent.ActiveModeBridge.mode.collectAsStateWithLifecycle()
+    val pendingApprovals by app.toolApprovalGate.pending.collectAsStateWithLifecycle()
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        val stored = app.modePreferences.getString("agent_mode", null)
+        com.uma.workbench.agent.ActiveModeBridge.publish(
+            com.uma.workbench.agent.AgentMode.fromStorageKey(stored)
+        )
+    }
+    if (pendingApprovals.isNotEmpty()) {
+        ToolApprovalDialog(approvalGate = app.toolApprovalGate)
+    }
     if (selectedGroup != null) {
         AgentGroupChatDialog(
             groupName = selectedGroup!!.name,
@@ -87,6 +99,12 @@ fun AgentPartnerPanel(
             onRetry = viewModel::retryFailedMessage,
             onSettings = { editingGroupSettings = true },
             authorization = authorization,
+            approvalGate = app.toolApprovalGate,
+            onModeChange = { mode ->
+                app.modePreferences.edit { it.putString("agent_mode", mode.storageKey) }
+                com.uma.workbench.agent.ActiveModeBridge.publish(mode)
+            },
+            currentMode = currentMode,
             onDismiss = { viewModel.selectGroup(null) }
         )
     } else {
@@ -193,6 +211,9 @@ private fun AgentGroupChatDialog(
     onRetry: (String) -> Unit,
     onSettings: () -> Unit,
     authorization: GitHubAuthorizationController,
+    approvalGate: com.uma.workbench.agent.UiToolApprovalGate,
+    onModeChange: (com.uma.workbench.agent.AgentMode) -> Unit,
+    currentMode: com.uma.workbench.agent.AgentMode,
     onDismiss: () -> Unit
 ) {
     var input by remember { mutableStateOf("") }
@@ -229,6 +250,23 @@ private fun AgentGroupChatDialog(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text("生成中", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                }
+                var modeMenuExpanded by remember { mutableStateOf(false) }
+                Box {
+                    IconButton(onClick = { modeMenuExpanded = true }, modifier = Modifier.size(28.dp)) {
+                        Text("🎛", fontSize = 16.sp)
+                    }
+                    DropdownMenu(expanded = modeMenuExpanded, onDismissRequest = { modeMenuExpanded = false }) {
+                        com.uma.workbench.agent.AgentMode.entries.forEach { mode ->
+                            DropdownMenuItem(
+                                text = { Text("${mode.label}（${mode.description.take(20)}）") },
+                                onClick = {
+                                    modeMenuExpanded = false
+                                    onModeChange(mode)
+                                }
+                            )
+                        }
+                    }
                 }
                 IconButton(onClick = { showingAuthorization = true }, modifier = Modifier.size(28.dp)) {
                     Text("🔑", fontSize = 16.sp)
@@ -800,6 +838,65 @@ private fun GitHubAuthorizationDialog(
                         }
                     }
                 }
+            }
+        }
+    )
+}
+
+@Composable
+private fun ToolApprovalDialog(approvalGate: com.uma.workbench.agent.UiToolApprovalGate) {
+    val pending = approvalGate.pending.collectAsStateWithLifecycle().value
+    val current = pending.firstOrNull() ?: return
+    var customReason by remember(current.request.callId) { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = {
+            approvalGate.respond(current.request.callId, approved = false, reason = "用户在 UI 关闭审批对话框")
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    approvalGate.respond(
+                        current.request.callId,
+                        approved = true,
+                        reason = "用户批准"
+                    )
+                }
+            ) { Text("批准") }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = {
+                    approvalGate.respond(
+                        current.request.callId,
+                        approved = false,
+                        reason = if (customReason.isNotBlank()) customReason else "用户拒绝"
+                    )
+                    customReason = ""
+                }
+            ) { Text("拒绝") }
+        },
+        title = { Text("工具执行审批 · ${current.request.riskLevel.name}") },
+        text = {
+            Column(Modifier.fillMaxWidth()) {
+                Text("工具：${current.request.toolName}", fontFamily = FontFamily.Monospace, fontSize = 14.sp)
+                Spacer(Modifier.height(8.dp))
+                Text("参数：", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f), fontSize = 12.sp)
+                Text(
+                    current.request.argumentsJson.take(800),
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(current.request.reason, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = customReason,
+                    onValueChange = { customReason = it },
+                    label = { Text("拒绝理由（可选）") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     )

@@ -37,6 +37,14 @@ class WorkbenchApplication : Application() {
 
     /** GitHub 远程操作一次性授权令牌库（UI 发放，Agent 工具消耗）。 */
     val githubConfirmationStore = com.uma.workbench.github.GitHubConfirmationStore()
+
+    /** UI 驱动的工具审批门（高风险工具执行时挂起等 UI 响应）。 */
+    val toolApprovalGate = com.uma.workbench.agent.UiToolApprovalGate()
+
+    /** Agent 当前对话模式持久化。 */
+    val modePreferences by lazy {
+        getSharedPreferences("agent_mode", android.content.Context.MODE_PRIVATE)
+    }
     lateinit var githubCloneAgentSource: GitHubCloneAgentToolDataSource
         private set
     lateinit var agentPartnerStore: AgentPartnerStore

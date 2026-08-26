@@ -35,7 +35,7 @@ class ReadonlyAgentToolExecutor(
  private val githubSource:GitHubReadonlyAgentToolDataSource?=null,
  private val githubContributionSource:GitHubContributionAgentToolDataSource?=null,
  private val githubCloneSource:GitHubCloneAgentToolDataSource?=null
-){
+) : AgentToolExecutor {
  suspend fun executeTurn(rawCalls:List<AiToolCall>):List<AgentToolOutcome>{val calls=AiToolCallNormalizer.normalize(rawCalls);require(calls.size<=limits.maxCallsPerTurn){"本轮工具调用 ${calls.size} 超过上限 ${limits.maxCallsPerTurn}"};val cache=linkedMapOf<String,AgentToolOutcome>();return calls.map{call->val key=AiToolCallNormalizer.semanticFingerprint(call);cache[key]?.forCall(call)?:execute(call).also{cache[key]=it}}}
  suspend fun execute(call:AiToolCall):AgentToolOutcome=timed(call){args->if(call.name=="read_tool_result")readStoredPage(args)else storePaged(call.name,dispatch(call.name,args))}
  suspend fun executeSpecial(call:AiToolCall,operation:suspend()->AgentSpecialToolPayload):AgentToolOutcome{val started=nowMillis();return try{ReadonlyAgentToolPolicy.validate(call);val payload=operation();require(payload.persistedContent.isNotEmpty()){"特殊工具完整结果不能为空"};require(payload.modelContent.isNotEmpty()){"特殊工具引用清单不能为空"};val id=resultStore.put(payload.persistedContent,call.name);val stored=completeStored(id);AgentToolOutcome.Success(AgentToolResult(call.id,call.name,id,payload.modelContent,0,0,stored.totalCharacterCount,false,0,stored.sha256,(nowMillis()-started).coerceAtLeast(0)))}catch(error:Throwable){if(error is kotlinx.coroutines.CancellationException)throw error;AgentToolOutcome.Failure(AgentToolFailure(call.id,call.name,error.stackTraceToString(),(nowMillis()-started).coerceAtLeast(0)))}}
