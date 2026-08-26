@@ -45,6 +45,11 @@ class WorkbenchApplication : Application() {
     val modePreferences by lazy {
         getSharedPreferences("agent_mode", android.content.Context.MODE_PRIVATE)
     }
+
+    /** 局域网自托管模型端点配置。 */
+    val lanModelStore by lazy {
+        com.uma.workbench.agent.LanModelSettingsStore(this)
+    }
     lateinit var githubCloneAgentSource: GitHubCloneAgentToolDataSource
         private set
     lateinit var agentPartnerStore: AgentPartnerStore
