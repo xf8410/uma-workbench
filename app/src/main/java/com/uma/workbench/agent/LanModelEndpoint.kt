@@ -37,14 +37,14 @@ data class LanModelEndpoint(
         require(baseUrl.isNotBlank()) { "局域网模型地址不能为空" }
         require(model.isNotBlank()) { "模型名称不能为空" }
         val url = runCatching { URL(baseUrl) }.getOrElse {
-            error("无效的 URL：$baseUrl")
+            throw IllegalArgumentException("无效的 URL：$baseUrl")
         }
         val host = url.host
         when {
             url.protocol == "https" -> { /* HTTPS is always allowed */ }
             url.protocol == "http" && isPrivateNetworkAddress(host) -> { /* HTTP allowed for LAN */ }
-            url.protocol == "http" -> error("HTTP 仅允许用于局域网地址（192.168.x.x / 10.x.x.x / 172.16-31.x.x / localhost）")
-            else -> error("不支持的协议：${url.protocol}，请使用 http:// 或 https://")
+            url.protocol == "http" -> throw IllegalArgumentException("HTTP 仅允许用于局域网地址（192.168.x.x / 10.x.x.x / 172.16-31.x.x / localhost）")
+            else -> throw IllegalArgumentException("不支持的协议：${url.protocol}，请使用 http:// 或 https://")
         }
     }
 
