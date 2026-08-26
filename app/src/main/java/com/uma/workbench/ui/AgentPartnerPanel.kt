@@ -102,7 +102,7 @@ fun AgentPartnerPanel(
             authorization = authorization,
             approvalGate = app.toolApprovalGate,
             onModeChange = { mode ->
-                app.modePreferences.edit { it.putString("agent_mode", mode.storageKey) }
+                app.modePreferences.edit { putString("agent_mode", mode.storageKey) }
                 com.uma.workbench.agent.ActiveModeBridge.publish(mode)
             },
             currentMode = currentMode,
