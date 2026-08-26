@@ -451,7 +451,7 @@ private fun GroupMessageItem(
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                                 )
                                 Text(
-                                    tc.tool,
+                                    toolDisplayName(tc.tool),
                                     fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
@@ -516,6 +516,34 @@ private fun parseUsageSummary(usageJson: String?): String {
 }
 
 private data class ToolCallInfo(val tool: String, val status: String, val args: String)
+
+/** 把工具内部名映射为中文展示名，方便用户在群聊里看懂。 */
+private fun toolDisplayName(tool: String): String = when (tool) {
+    "list_workspace_files" -> "列出文件"
+    "read_current_file" -> "读当前文件"
+    "read_file" -> "读文件"
+    "read_file_range" -> "读文件片段"
+    "search_workspace" -> "搜索工作区"
+    "search_symbol" -> "搜索符号"
+    "read_il2cpp_class" -> "读 IL2CPP 类"
+    "read_protocol_record" -> "读协议记录"
+    "read_so_snapshot" -> "读 SO 快照"
+    "read_doc" -> "读文档"
+    "read_tool_result" -> "读工具结果"
+    "delegate_subagents" -> "分派子 Agent"
+    "github_list_repositories" -> "GitHub 仓库列表"
+    "github_get_repository" -> "GitHub 仓库详情"
+    "github_list_branches" -> "GitHub 分支列表"
+    "github_read_file" -> "GitHub 读文件"
+    "github_list_commits" -> "GitHub 提交列表"
+    "github_get_workflow_runs" -> "GitHub Actions 运行"
+    "github_contribute_fork" -> "Fork 仓库"
+    "github_contribute_branch" -> "创建分支"
+    "github_contribute_write" -> "提交文件"
+    "github_contribute_pr" -> "创建 PR"
+    "github_clone_repository" -> "克隆仓库"
+    else -> tool
+}
 
 private fun parseToolCalls(toolCallsJson: String?): List<ToolCallInfo> {
     if (toolCallsJson.isNullOrBlank()) return emptyList()
