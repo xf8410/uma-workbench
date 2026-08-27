@@ -2,6 +2,7 @@ package com.uma.workbench
 
 import android.app.Application
 import com.uma.workbench.agent.AgentPartnerDatabase
+import kotlinx.coroutines.launch
 import com.uma.workbench.agent.AgentPartnerStore
 import com.uma.workbench.agent.AndroidGitHubReadonlyAgentToolDataSource
 import com.uma.workbench.agent.ActiveWorkspaceBridge
