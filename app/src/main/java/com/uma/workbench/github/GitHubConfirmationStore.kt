@@ -1,7 +1,7 @@
 package com.uma.workbench.github
 
-/** 贡献流远程操作类型（令牌作用域用）。 */
-enum class GitHubRemoteOperation { FORK, BRANCH, WRITE, PULL_REQUEST }
+/** GitHub 远程操作类型（令牌作用域用）。 */
+enum class GitHubRemoteOperation { FORK, BRANCH, WRITE, PULL_REQUEST, CANCEL_WORKFLOW }
 
 /**
  * GitHub 远程操作一次性授权令牌。
@@ -43,8 +43,7 @@ class GitHubConfirmationStore(
         val id = buildString {
             repeat(TOKEN_LENGTH) { append(ALPHABET.random()) }
         }
-        // 单步令牌 1 次；多操作令牌按操作类型数+1 给余量（贡献流 fork/branch/write*/pr，
-        // write 可多次，故按类型数 + 额外 write 余量计算）
+        // 单步令牌 1 次；多操作令牌按操作类型数+额外 write 余量计算。
         val uses = if (operations.size == 1) 1 else operations.size + WRITE_ALLOWANCE
         tokens[id] = ConfirmationToken(
             id = id,
@@ -73,7 +72,7 @@ class GitHubConfirmationStore(
         }
         token.remainingUses -= 1
         if (operation == GitHubRemoteOperation.PULL_REQUEST) {
-            // PR 是贡献流终态：发出即作废整张令牌
+            // PR 是贡献流终态：发出即作废整张令牌。
             tokens.remove(confirmationId)
         } else if (token.remainingUses == 0) {
             tokens.remove(confirmationId)
