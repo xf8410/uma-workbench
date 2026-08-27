@@ -8,7 +8,7 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.longOrNull
 
-data class SubAgentReportSummary(val taskId:String,val status:String,val answer:String?,val error:String?,val requestId:String?,val model:String?,val totalTokens:Long?,val evidenceCount:Int,val completeEvidenceCount:Int)
+data class SubAgentReportSummary(val taskId:String,val status:String,val answer:String?,val error:String?,val requestId:String?,val model:String?,val totalTokens:Long?,val evidenceCount:Int,val completeEvidenceCount:Int,val roundsCount:Int?=null,val toolCallCount:Int?=null,val elapsedMillis:Long?=null)
 object SubAgentReportPresentation{
  private val json=Json{ignoreUnknownKeys=true}
  fun parse(content:String):List<SubAgentReportSummary>?=runCatching{
@@ -23,7 +23,10 @@ object SubAgentReportPresentation{
     error=r.string("error")?:r.string("preview")?.takeIf{r.string("status")=="failure"},requestId=r.string("requestId"),model=r.string("model"),
     totalTokens=(r["usage"]as?JsonObject)?.primitive("totalTokens")?.longOrNull?:r.primitive("totalTokens")?.longOrNull,
     evidenceCount=evidence?.size?:r.primitive("evidenceCount")?.longOrNull?.toInt()?:0,
-    completeEvidenceCount=evidence?.count{((it as?JsonObject)?.primitive("complete")?.booleanOrNull==true)}?:r.primitive("completeEvidenceCount")?.longOrNull?.toInt()?:0)
+    completeEvidenceCount=evidence?.count{((it as?JsonObject)?.primitive("complete")?.booleanOrNull==true)}?:r.primitive("completeEvidenceCount")?.longOrNull?.toInt()?:0,
+    roundsCount=r.primitive("roundsCount")?.longOrNull?.toInt(),
+    toolCallCount=r.primitive("toolCallCount")?.longOrNull?.toInt(),
+    elapsedMillis=r.primitive("elapsedMillis")?.longOrNull)
   }
  }.getOrNull()
  private fun JsonObject.string(n:String)=primitive(n)?.contentOrNull

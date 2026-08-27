@@ -57,6 +57,7 @@ import kotlinx.coroutines.flow.Flow
     @Query("SELECT * FROM audit_sources WHERE id = :id LIMIT 1") suspend fun get(id: String): AuditSourceEntity?
     @Query("SELECT * FROM audit_sources WHERE sha256 = :sha256 ORDER BY id LIMIT 1") suspend fun findBySha256(sha256: String): AuditSourceEntity?
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(value: AuditSourceEntity)
+    @Query("DELETE FROM audit_sources WHERE uri LIKE :prefix || '%'") suspend fun deleteByUriPrefix(prefix: String): Int
 }
 @Dao interface EvidenceDao {
     @Query("SELECT * FROM evidence WHERE sourceId = :sourceId ORDER BY createdAt DESC") fun observe(sourceId: String): Flow<List<EvidenceEntity>>

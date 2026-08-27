@@ -19,15 +19,17 @@
 
 ## 实施顺序
 
-- [ ] 定义与厂商无关的 `ModelProvider` / `AgentProvider`
-- [ ] 增加 `NoModelProvider` 和确定性任务规划器
-- [ ] 工具能力清单、输入 Schema 和风险等级
-- [ ] 高风险工具逐次确认；禁止模型绕过审批
-- [ ] 执行预算映射：快速 / 标准 / 深入 / 极限
-- [ ] Room 持久化 Agent Run、Tool Call、审批和 checkpoint
+- [x] 定义与厂商无关的 `ModelProvider` / `AgentProvider`
+- [x] 增加 `NoModelProvider` 和确定性任务规划器（DeterministicAuditOrchestrator）
+- [x] 工具能力清单、输入 Schema 和风险等级
+- [x] 高风险工具逐次确认（ApprovableToolExecutor 已实现）
+- [x] 执行预算映射：快速 / 标准 / 深入 / 极限
+- [x] Room 持久化 Agent Run、Tool Call、审批和 checkpoint
+- [x] AgentMode 权限矩阵 + 模式切换确认 + 系统提示注入
+- [x] 群聊/单聊统一接入审批门与模式权限
 - [ ] 本地小模型运行时可插拔，不将超大模型权重打包进 APK
-- [ ] 局域网自托管模型连接（不要求厂商 API）
-- [ ] 模型输出必须由确定性工具或证据引用验证
+- [x] 局域网自托管模型连接（不要求厂商 API）
+- [x] 模型输出必须由确定性工具或证据引用验证
 
 ## 非目标
 

@@ -11,7 +11,7 @@ interface ReadonlyAgentObserver{fun onModelEvent(round:Int,event:AiStreamEvent)=
 
 class ReadonlyAgentLoop(
     private val provider:AiStreamingProvider,
-    private val executor:ReadonlyAgentToolExecutor,
+    private val executor:AgentToolExecutor,
     private val limits:ReadonlyAgentLoopLimits=ReadonlyAgentLoopLimits(),
     private val specialToolHandler:AgentSpecialToolHandler?=null
 ){

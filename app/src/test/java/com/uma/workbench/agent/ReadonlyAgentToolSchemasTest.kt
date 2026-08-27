@@ -15,20 +15,44 @@ class ReadonlyAgentToolSchemasTest {
         "github_read_file", "github_list_commits", "github_get_workflow_runs"
     )
 
+    /** 贡献流工具：写用户自己的 fork，每步都有 confirmationId 门控，仅主 Agent 可见。 */
+    private val contributionNames = setOf(
+        "github_contribute_fork", "github_contribute_branch",
+        "github_contribute_write", "github_contribute_pr"
+    )
+
     @Test fun schemaNamesExactlyMatchReadonlyPolicy() {
         val names = names(ReadonlyAgentToolSchemas.openAiCompatible)
         assertEquals(ReadonlyAgentToolPolicy.allowedNames, names)
-        assertFalse(names.any { it.contains("write") || it.contains("delete") || it.contains("apply") })
+        assertFalse(
+            "除贡献流外不得出现写/删/改类工具",
+            names.any {
+                it !in contributionNames &&
+                    (it.contains("write") || it.contains("delete") || it.contains("apply"))
+            }
+        )
         assertTrue("read_tool_result" in names)
         assertTrue("delegate_subagents" in names)
         assertTrue(names.containsAll(githubNames))
+        assertTrue(names.containsAll(contributionNames))
+    }
+
+    @Test fun childInvestigationSchemaAddsCloneOnly() {
+        val names = names(ReadonlyAgentToolSchemas.childInvestigation)
+        val childNames = names(ReadonlyAgentToolSchemas.childReadOnly)
+        // 调查型子 Agent = 工作区只读 + 克隆，不多不少
+        assertEquals(childNames + setOf("github_clone_repository"), names)
+        assertFalse("delegate_subagents" in names)
+        assertFalse(names.any { it in contributionNames })
+        assertFalse(names.any { it in githubNames })
     }
 
     @Test fun childSchemaExcludesDelegationAndGitHubQuotaTools() {
         val names = names(ReadonlyAgentToolSchemas.childReadOnly)
         assertFalse("delegate_subagents" in names)
-        assertTrue(names.intersect(githubNames).isEmpty())
-        assertEquals(ReadonlyAgentToolPolicy.allowedNames - githubNames - "delegate_subagents", names)
+        val rootOnlyGithub = githubNames + contributionNames + setOf("github_clone_repository")
+        assertTrue(names.intersect(rootOnlyGithub).isEmpty())
+        assertEquals(ReadonlyAgentToolPolicy.allowedNames - rootOnlyGithub - "delegate_subagents", names)
     }
 
     @Test fun githubSchemasHaveClosedObjectsAndExpectedRequiredFields() {

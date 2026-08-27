@@ -22,12 +22,14 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.uma.workbench.github.GitContent
 import com.uma.workbench.ui.theme.WorkbenchColors
@@ -103,7 +106,9 @@ fun GitHubScreen(viewModel: GitHubViewModel) {
 
 @Composable
 private fun RepositoryList(state: GitHubUiState, viewModel: GitHubViewModel) {
+    LaunchedEffect(Unit) { viewModel.refreshClones() }
     Column(Modifier.fillMaxSize().padding(12.dp)) {
+        if (state.clones.isNotEmpty()) CloneManagementSection(state, viewModel)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("GitHub · ${state.account?.login}", style = MaterialTheme.typography.titleLarge, color = WorkbenchColors.textPrimary)
@@ -167,5 +172,46 @@ private fun RepositoryEntry(entry: GitContent, viewModel: GitHubViewModel) {
         )
         Text(entry.path.substringAfterLast('/'), Modifier.padding(start = 8.dp).weight(1f), color = WorkbenchColors.textPrimary)
         if (entry.type != "dir") Text("${entry.size} B", color = WorkbenchColors.textMuted)
+    }
+}
+
+
+@Composable
+private fun CloneManagementSection(state: GitHubUiState, viewModel: GitHubViewModel) {
+    var expanded by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "已克隆仓库 ${state.clones.size} 个 · 共 ${state.clones.sumOf { it.totalBytes } / 1024} KB",
+                color = WorkbenchColors.textSecondary,
+                modifier = Modifier.weight(1f)
+            )
+            Text(if (expanded) "收起" else "展开", color = WorkbenchColors.textMuted, fontSize = 12.sp)
+        }
+        if (expanded) {
+            state.clones.forEach { clone ->
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(clone.ownerRepo.replace("__", "/"), color = WorkbenchColors.textPrimary, fontSize = 14.sp)
+                        Text(
+                            "ref: ${clone.refs.joinToString(", ").ifBlank { "-" }} · ${clone.fileCount} 个文件 · ${clone.totalBytes / 1024} KB",
+                            color = WorkbenchColors.textMuted,
+                            fontSize = 12.sp
+                        )
+                    }
+                    TextButton(
+                        onClick = { viewModel.deleteClone(clone) },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    ) { Text("删除", fontSize = 12.sp) }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+        }
     }
 }

@@ -32,17 +32,21 @@ class ReadonlyAgentToolExecutor(
  private val limits:AgentToolExecutionLimits=AgentToolExecutionLimits(),
  private val resultStore:AgentToolResultStore=InMemoryAgentToolResultStore(),
  private val nowMillis:()->Long=System::currentTimeMillis,
- private val githubSource:GitHubReadonlyAgentToolDataSource?=null
-){
+ private val githubSource:GitHubReadonlyAgentToolDataSource?=null,
+ private val githubContributionSource:GitHubContributionAgentToolDataSource?=null,
+ private val githubCloneSource:GitHubCloneAgentToolDataSource?=null
+) : AgentToolExecutor {
  suspend fun executeTurn(rawCalls:List<AiToolCall>):List<AgentToolOutcome>{val calls=AiToolCallNormalizer.normalize(rawCalls);require(calls.size<=limits.maxCallsPerTurn){"本轮工具调用 ${calls.size} 超过上限 ${limits.maxCallsPerTurn}"};val cache=linkedMapOf<String,AgentToolOutcome>();return calls.map{call->val key=AiToolCallNormalizer.semanticFingerprint(call);cache[key]?.forCall(call)?:execute(call).also{cache[key]=it}}}
- suspend fun execute(call:AiToolCall):AgentToolOutcome=timed(call){args->if(call.name=="read_tool_result")readStoredPage(args)else storePaged(call.name,dispatch(call.name,args))}
- suspend fun executeSpecial(call:AiToolCall,operation:suspend()->AgentSpecialToolPayload):AgentToolOutcome{val started=nowMillis();return try{ReadonlyAgentToolPolicy.validate(call);val payload=operation();require(payload.persistedContent.isNotEmpty()){"特殊工具完整结果不能为空"};require(payload.modelContent.isNotEmpty()){"特殊工具引用清单不能为空"};val id=resultStore.put(payload.persistedContent,call.name);val stored=completeStored(id);AgentToolOutcome.Success(AgentToolResult(call.id,call.name,id,payload.modelContent,0,0,stored.totalCharacterCount,false,0,stored.sha256,(nowMillis()-started).coerceAtLeast(0)))}catch(error:Throwable){if(error is kotlinx.coroutines.CancellationException)throw error;AgentToolOutcome.Failure(AgentToolFailure(call.id,call.name,error.stackTraceToString(),(nowMillis()-started).coerceAtLeast(0)))}}
+ override suspend fun execute(call:AiToolCall):AgentToolOutcome=timed(call){args->if(call.name=="read_tool_result")readStoredPage(args)else storePaged(call.name,dispatch(call.name,args))}
+ override suspend fun executeSpecial(call:AiToolCall,operation:suspend()->AgentSpecialToolPayload):AgentToolOutcome{val started=nowMillis();return try{ReadonlyAgentToolPolicy.validate(call);val payload=operation();require(payload.persistedContent.isNotEmpty()){"特殊工具完整结果不能为空"};require(payload.modelContent.isNotEmpty()){"特殊工具引用清单不能为空"};val id=resultStore.put(payload.persistedContent,call.name);val stored=completeStored(id);AgentToolOutcome.Success(AgentToolResult(call.id,call.name,id,payload.modelContent,0,0,stored.totalCharacterCount,false,0,stored.sha256,(nowMillis()-started).coerceAtLeast(0)))}catch(error:Throwable){if(error is kotlinx.coroutines.CancellationException)throw error;AgentToolOutcome.Failure(AgentToolFailure(call.id,call.name,error.stackTraceToString(),(nowMillis()-started).coerceAtLeast(0)))}}
  private suspend fun timed(call:AiToolCall,operation:suspend(JsonObject)->AgentToolResultPage):AgentToolOutcome{val started=nowMillis();return try{val page=operation(ReadonlyAgentToolPolicy.validate(call));AgentToolOutcome.Success(AgentToolResult(call.id,call.name,page.resultId,page.content,page.startOffset,page.endOffsetExclusive,page.totalCharacterCount,page.complete,page.nextOffset,page.sha256,(nowMillis()-started).coerceAtLeast(0)))}catch(error:Throwable){if(error is kotlinx.coroutines.CancellationException)throw error;AgentToolOutcome.Failure(AgentToolFailure(call.id,call.name,error.stackTraceToString(),(nowMillis()-started).coerceAtLeast(0)))}}
  private fun storePaged(name:String,content:String):AgentToolResultPage{require(content.isNotEmpty()){"工具完整结果不能为空"};val id=resultStore.put(content,name);return resultStore.read(id,0,limits.pageCharacters)}
  private fun readStoredPage(args:JsonObject):AgentToolResultPage{val id=args.requiredString("resultId");val offset=args.optionalNonNegativeInt("offset")?:0;val limit=args.optionalPositiveInt("limit")?:limits.pageCharacters;return resultStore.read(id,offset,limit)}
  private fun completeStored(id:String)=resultStore.read(id,0,Int.MAX_VALUE)
  private fun AgentToolOutcome.forCall(call:AiToolCall)=when(this){is AgentToolOutcome.Success->AgentToolOutcome.Success(result.copy(callId=call.id,toolName=call.name,elapsedMillis=0));is AgentToolOutcome.Failure->AgentToolOutcome.Failure(failure.copy(callId=call.id,toolName=call.name,elapsedMillis=0))}
  private fun github():GitHubReadonlyAgentToolDataSource=githubSource?:error("GitHub 只读工具未配置")
+ private fun githubContribution():GitHubContributionAgentToolDataSource=githubContributionSource?:error("GitHub 贡献流工具未配置")
+ private fun githubClone():GitHubCloneAgentToolDataSource=githubCloneSource?:error("GitHub 克隆工具未配置")
  private suspend fun dispatch(name:String,args:JsonObject):String=when(name){
   "list_workspace_files"->source.listWorkspaceFiles()
   "read_current_file"->source.readCurrentFile()
@@ -60,6 +64,11 @@ class ReadonlyAgentToolExecutor(
   "github_read_file"->github().readFile(args.requiredString("owner"),args.requiredString("name"),args.requiredString("ref"),args.requiredStringAllowEmpty("path"))
   "github_list_commits"->github().listCommits(args.requiredString("owner"),args.requiredString("name"),args.requiredString("ref"),args.optionalPositiveInt("page")?:1)
   "github_get_workflow_runs"->github().getWorkflowRuns(args.requiredString("owner"),args.requiredString("name"),args.optionalPositiveInt("page")?:1)
+  "github_clone_repository"->githubClone().cloneRepository(args.requiredString("owner"),args.requiredString("repo"),args.optionalString("ref")?:"")
+  "github_contribute_fork"->githubContribution().forkRepository(args.requiredString("owner"),args.requiredString("repo"),args.requiredString("confirmationId"))
+  "github_contribute_branch"->githubContribution().createBranch(args.requiredString("progress"),args.requiredString("branch"),args.requiredString("confirmationId"))
+  "github_contribute_write"->githubContribution().writeFile(args.requiredString("progress"),args.requiredString("path"),args.requiredString("content"),args.requiredString("commitMessage"),args.requiredString("confirmationId"))
+  "github_contribute_pr"->githubContribution().createPullRequest(args.requiredString("progress"),args.requiredString("title"),args.requiredString("body"),args.optionalBoolean("draft")?:false,args.requiredString("confirmationId"))
   else->error("不允许执行工具 $name")
  }
  private fun JsonObject.requiredString(name:String)=optionalString(name)?.takeIf{it.isNotBlank()}?:error("参数 $name 必须是非空字符串")

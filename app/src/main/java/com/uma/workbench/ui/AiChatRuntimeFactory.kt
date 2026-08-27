@@ -5,6 +5,11 @@ import com.uma.workbench.agent.ActiveWorkspaceDocumentBridge
 import com.uma.workbench.agent.AiStreamingProvider
 import com.uma.workbench.agent.AndroidReadonlyAgentToolDataSource
 import com.uma.workbench.agent.FileAgentToolResultStore
+import com.uma.workbench.agent.ActiveModeBridge
+import com.uma.workbench.agent.AgentMode
+import com.uma.workbench.agent.GitHubCloneAgentToolDataSource
+import com.uma.workbench.agent.GitHubContributionAgentToolDataSource
+import com.uma.workbench.agent.ToolApprovalGate
 import com.uma.workbench.agent.GitHubReadonlyAgentToolDataSource
 import com.uma.workbench.agent.ReadonlyAgentLoop
 import com.uma.workbench.agent.ReadonlyAgentRuntimeFactory
@@ -24,6 +29,10 @@ internal object AiChatRuntimeFactory {
         workspaceId = workspaceId,
         conversationId = conversationId,
         githubSource = app.githubReadonlyAgentSource,
+        githubContributionSource = app.githubContributionAgentSource,
+        githubCloneSource = app.githubCloneAgentSource,
+        approvalGate = app.toolApprovalGate,
+        modeProvider = { ActiveModeBridge.mode.value },
         workspaceSource = AndroidReadonlyAgentToolDataSource(
             app, app.database, workspaceId, { ActiveWorkspaceDocumentBridge.document.value }
         )
@@ -35,7 +44,11 @@ internal object AiChatRuntimeFactory {
         workspaceId: String,
         conversationId: String,
         githubSource: GitHubReadonlyAgentToolDataSource,
-        workspaceSource: ReadonlyAgentToolDataSource
+        workspaceSource: ReadonlyAgentToolDataSource,
+        githubContributionSource: GitHubContributionAgentToolDataSource? = null,
+        githubCloneSource: GitHubCloneAgentToolDataSource? = null,
+        approvalGate: ToolApprovalGate? = null,
+        modeProvider: () -> AgentMode = { AgentMode.ASK }
     ): ReadonlyAgentLoop {
         val resultStore = FileAgentToolResultStore(
             File(filesDir, "agent-tool-results/$workspaceId/$conversationId"),
@@ -46,7 +59,11 @@ internal object AiChatRuntimeFactory {
             provider = provider,
             source = workspaceSource,
             resultStore = resultStore,
-            githubSource = githubSource
+            githubSource = githubSource,
+            githubContributionSource = githubContributionSource,
+            githubCloneSource = githubCloneSource,
+            approvalGate = approvalGate,
+            modeProvider = modeProvider
         ).createRootLoop()
     }
 }

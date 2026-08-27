@@ -13,6 +13,26 @@ data class ActiveWorkspaceDocument(
     val title: String
 )
 
+/** Shared UI bridge for current Agent conversation mode (ASK/INVESTIGATE/ACT/OBSERVE). */
+object ActiveModeBridge {
+    private val _mode = MutableStateFlow(AgentMode.ASK)
+    val mode: StateFlow<AgentMode> = _mode.asStateFlow()
+
+    fun publish(mode: AgentMode) {
+        _mode.value = mode
+    }
+}
+
+/** Shared UI bridge containing the active workspace identity. */
+object ActiveWorkspaceBridge {
+    private val _workspaceId = MutableStateFlow<String?>(null)
+    val workspaceId: StateFlow<String?> = _workspaceId.asStateFlow()
+
+    fun publish(id: String?) {
+        _workspaceId.value = id
+    }
+}
+
 /** Shared UI bridge containing the active document identity. */
 object ActiveWorkspaceDocumentBridge {
     private val _document = MutableStateFlow<ActiveWorkspaceDocument?>(null)

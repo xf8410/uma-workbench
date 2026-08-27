@@ -61,6 +61,9 @@ fun SubAgentReportPanel(completeToolContent: String, modifier: Modifier = Modifi
                         report.totalTokens?.let { add("Token $it") }
                         add("证据 ${report.evidenceCount}")
                         if (report.completeEvidenceCount != report.evidenceCount) add("完整 ${report.completeEvidenceCount}")
+                        report.roundsCount?.let { add("轮次 $it") }
+                        report.toolCallCount?.let { add("工具 $it") }
+                        report.elapsedMillis?.let { add("耗时 ${"%.1f".format(it / 1000.0)}s") }
                         report.model?.let { add(it) }
                     }.joinToString(" · "), style = MaterialTheme.typography.labelSmall)
                     if (expanded) {

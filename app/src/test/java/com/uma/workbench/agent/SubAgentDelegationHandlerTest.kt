@@ -22,7 +22,18 @@ class SubAgentDelegationHandlerTest {
   val delegation=(result.rounds.first().toolOutcomes.single()as AgentToolOutcome.Success).result
   val manifest=Json.parseToJsonElement(delegation.content).jsonObject;assertEquals("sub_agent_report_manifest",manifest["type"]!!.jsonPrimitive.content);assertFalse(delegation.content.contains("\"answer\":\"child report\""));assertTrue(delegation.content.contains("\"preview\":\"child report\""))
   val complete=store.read(delegation.resultId,0,delegation.totalCharacterCount);val report=Json.parseToJsonElement(complete.content).jsonObject["reports"]!!.jsonArray.single().jsonObject;assertEquals("child report",report["answer"]!!.jsonPrimitive.content);assertEquals("read_current_file",report["evidence"]!!.jsonArray.single().jsonObject["tool"]!!.jsonPrimitive.content);assertTrue(complete.complete)
-  assertEquals(ReadonlyAgentToolSchemas.childReadOnly,childTools);assertFalse(childTools.toString().contains("delegate_subagents"))
+  assertEquals(ReadonlyAgentToolSchemas.childInvestigation,childTools);assertFalse(childTools.toString().contains("delegate_subagents"))
+ }
+
+ @Test fun compactReportParsesTaskCardMetrics(){
+  val json="""{"type":"sub_agent_reports","reports":[{"taskId":"t1","status":"success","requestId":"r1","totalTokens":1200,"roundsCount":3,"toolCallCount":7,"elapsedMillis":4500,"evidenceCount":5,"completeEvidenceCount":4}]}"""
+  val reports=SubAgentReportPresentation.parse(json)
+  org.junit.Assert.assertNotNull(reports);val r=reports!!.single()
+  org.junit.Assert.assertEquals(3,r.roundsCount);org.junit.Assert.assertEquals(7,r.toolCallCount);org.junit.Assert.assertEquals(4500L,r.elapsedMillis)
+  // 旧格式（无新字段）解析为 null，不崩
+  val legacy="""{"type":"sub_agent_reports","reports":[{"taskId":"t2","status":"success","requestId":"r2","totalTokens":10,"evidenceCount":1,"completeEvidenceCount":1}]}"""
+  val lr=SubAgentReportPresentation.parse(legacy)!!.single()
+  org.junit.Assert.assertNull(lr.roundsCount);org.junit.Assert.assertNull(lr.toolCallCount);org.junit.Assert.assertNull(lr.elapsedMillis)
  }
 
  @Test fun invalidUnknownTaskPropertyBecomesVisibleToolFailure()=runBlocking{

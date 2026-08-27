@@ -13,6 +13,7 @@ import com.uma.workbench.github.GitHubFileContent
 import com.uma.workbench.github.GitHubRepositorySummary
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
@@ -28,13 +29,54 @@ data class GitHubUiState(
     val file: GitHubFileContent? = null,
     val oauthClientId: String = "",
     val deviceCode: GitHubDeviceCode? = null,
-    val error: String? = null
+    val error: String? = null,
+    /** Agent 克隆到本地的仓库（github-clones 目录扫描结果）。 */
+    val clones: List<CloneRecord> = emptyList()
+)
+
+/** 本地克隆记录：owner__repo 目录聚合。 */
+data class CloneRecord(
+    val directory: java.io.File,
+    val ownerRepo: String,
+    val refs: List<String>,
+    val totalBytes: Long,
+    val fileCount: Int
 )
 
 class GitHubViewModel(application: Application) : AndroidViewModel(application) {
     private val credentialStore = GitHubCredentialStore(application)
     private val deviceFlow = GitHubDeviceFlow()
     private var deviceFlowJob: Job? = null
+    private val database = com.uma.workbench.data.AppDatabase.get(application)
+
+    /** 扫描本地克隆目录刷新克隆记录。 */
+    fun refreshClones() {
+        viewModelScope.launch {
+            val root = java.io.File(getApplication<Application>().filesDir, "github-clones")
+            val records = root.listFiles()?.filter { it.isDirectory }?.map { dir ->
+                var bytes = 0L
+                var count = 0
+                dir.walkTopDown().forEach { f -> if (f.isFile) { bytes += f.length(); count++ } }
+                CloneRecord(
+                    directory = dir,
+                    ownerRepo = dir.name,
+                    refs = dir.listFiles()?.filter { it.isDirectory }?.map { it.name } ?: emptyList(),
+                    totalBytes = bytes,
+                    fileCount = count
+                )
+            } ?: emptyList()
+            _state.update { it.copy(clones = records) }
+        }
+    }
+
+    /** 删除本地克隆：目录 + audit_sources 里的注册记录（按 uri 前缀）。 */
+    fun deleteClone(record: CloneRecord) {
+        viewModelScope.launch {
+            record.directory.deleteRecursively()
+            runCatching { database.auditSources().deleteByUriPrefix(record.directory.toURI().toString()) }
+            refreshClones()
+        }
+    }
     private val _state = MutableStateFlow(
         GitHubUiState(
             tokenPresent = credentialStore.loadToken().isNotEmpty(),

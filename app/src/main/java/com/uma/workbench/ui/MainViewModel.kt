@@ -18,6 +18,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.uma.workbench.agent.ActiveWorkspaceBridge
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -73,8 +74,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun protocolHistoryDiff() = protocolHistoryInspector.diff(protocolHistory.value)
 
     fun createWorkspace(name: String) = viewModelScope.launch { val ws = workspaceManager.create(name); openWorkspace(ws.id) }
-    fun openWorkspace(id: String) = viewModelScope.launch { workspaceManager.open(id); _currentWorkspaceId.value = id }
-    fun closeWorkspace() { _currentWorkspaceId.value = null }
+    fun openWorkspace(id: String) = viewModelScope.launch { workspaceManager.open(id); _currentWorkspaceId.value = id; ActiveWorkspaceBridge.publish(id) }
+    fun closeWorkspace() { _currentWorkspaceId.value = null; ActiveWorkspaceBridge.publish(null) }
     fun addProject(name: String, sourceUri: String?) = viewModelScope.launch { _currentWorkspaceId.value?.let { workspaceManager.addProject(it, name, sourceUri, null) } }
 
     fun openFile(uri: String, name: String) = viewModelScope.launch {
