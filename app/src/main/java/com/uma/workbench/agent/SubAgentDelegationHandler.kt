@@ -65,6 +65,9 @@ class SubAgentDelegationHandler(private val coordinator: SubAgentCoordinator) : 
                         put("requestId", outcome.result.requestId)
                         outcome.result.model?.let { put("model", it) }
                         put("totalTokens", outcome.result.usage.totalTokens)
+                        put("roundsCount", outcome.result.rounds.size)
+                        put("toolCallCount", outcome.result.rounds.sumOf { it.toolCalls.size })
+                        outcome.result.elapsedMillis?.let { put("elapsedMillis", it) }
                         val evidence = outcome.result.rounds.flatMap { it.toolOutcomes }
                         put("evidenceCount", evidence.size)
                         put("completeEvidenceCount", evidence.count { it is AgentToolOutcome.Success && it.result.complete })

@@ -5,6 +5,8 @@ import androidx.core.content.edit
 import com.uma.workbench.ui.theme.WorkbenchColors
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -376,11 +378,20 @@ private fun GenerationStatusBar(
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun GroupMessageItem(
     message: AgentGroupMessageEntity,
     onRetry: (String) -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .combinedClickable(onClick = {}, onLongClick = {
+                clipboard.setText(androidx.compose.ui.text.AnnotatedString(message.content))
+            })
+    ) {
         // Main message content
         Row(verticalAlignment = Alignment.Top) {
             if (message.status == "RUNNING") {

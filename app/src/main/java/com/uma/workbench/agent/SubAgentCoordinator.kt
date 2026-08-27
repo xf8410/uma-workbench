@@ -10,7 +10,7 @@ import kotlinx.coroutines.sync.withPermit
 
 data class SubAgentTask(val id:String,val instruction:String,val evidenceRequirements:String="引用实际读取到的文件、结果 ID、范围或哈希；无法验证时明确说明")
 data class SubAgentLimits(val maxTasksPerDispatch:Int=4,val maxParallelTasks:Int=2,val maxDepth:Int=1,val maxInstructionCharacters:Int=16_384,val maxCombinedAnswerCharacters:Int=131_072){init{require(maxTasksPerDispatch in 1..16);require(maxParallelTasks in 1..8);require(maxParallelTasks<=maxTasksPerDispatch);require(maxDepth in 1..4);require(maxInstructionCharacters in 1..100_000);require(maxCombinedAnswerCharacters in 1..1_000_000)}}
-data class SubAgentResult(val taskId:String,val requestId:String,val answer:String,val rounds:List<ReadonlyAgentRound>,val usage:AiTokenUsage,val model:String?)
+data class SubAgentResult(val taskId:String,val requestId:String,val answer:String,val rounds:List<ReadonlyAgentRound>,val usage:AiTokenUsage,val model:String?,val elapsedMillis:Long?=null)
 data class SubAgentFailure(val taskId:String,val completeError:String)
 sealed interface SubAgentOutcome{val taskId:String;data class Success(val result:SubAgentResult):SubAgentOutcome{override val taskId get()=result.taskId};data class Failure(val failure:SubAgentFailure):SubAgentOutcome{override val taskId get()=failure.taskId}}
 fun interface SubAgentLoopFactory{fun create():ReadonlyAgentLoop}
@@ -24,7 +24,7 @@ class SubAgentCoordinator(private val loopFactory:SubAgentLoopFactory,private va
  }
  private suspend fun execute(parent:AiGenerationRequest,task:SubAgentTask,depth:Int):SubAgentOutcome{
   val requestId=requestIdFactory();val messages=buildList{addAll(parent.messages.filter{it.role=="system"});add(AiPromptMessage("system",policy(depth)));add(AiPromptMessage("user",prompt(task)))}
-  return try{val run=loopFactory.create().run(parent.copy(requestId=requestId,messages=messages,tools=ReadonlyAgentToolSchemas.childInvestigation));SubAgentOutcome.Success(SubAgentResult(task.id,requestId,run.completeAnswer,run.rounds,run.usage,run.model))}catch(c:CancellationException){throw c}catch(e:Throwable){SubAgentOutcome.Failure(SubAgentFailure(task.id,e.stackTraceToString()))}
+  val startedAt=System.currentTimeMillis();return try{val run=loopFactory.create().run(parent.copy(requestId=requestId,messages=messages,tools=ReadonlyAgentToolSchemas.childInvestigation));SubAgentOutcome.Success(SubAgentResult(task.id,requestId,run.completeAnswer,run.rounds,run.usage,run.model,System.currentTimeMillis()-startedAt))}catch(c:CancellationException){throw c}catch(e:Throwable){SubAgentOutcome.Failure(SubAgentFailure(task.id,e.stackTraceToString()))}
  }
  private fun policy(depth:Int)="""你是只读证据调查子 Agent，当前深度为 $depth。
 只完成分配给你的单一任务，不扩展用户目标，不执行写入、发布、删除或凭据操作。

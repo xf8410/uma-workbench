@@ -38,8 +38,28 @@ class WorkbenchApplication : Application() {
     /** GitHub 远程操作一次性授权令牌库（UI 发放，Agent 工具消耗）。 */
     val githubConfirmationStore = com.uma.workbench.github.GitHubConfirmationStore()
 
-    /** UI 驱动的工具审批门（高风险工具执行时挂起等 UI 响应）。 */
-    val toolApprovalGate = com.uma.workbench.agent.UiToolApprovalGate()
+    /** UI 驱动的工具审批门（高风险工具执行时挂起等 UI 响应）；每次决定落审计库。 */
+    val toolApprovalGate = com.uma.workbench.agent.UiToolApprovalGate(
+        onDecision = { request, decision ->
+            kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    com.uma.workbench.agent.AgentPartnerDatabase.get(this@WorkbenchApplication)
+                        .toolApprovalRecords().upsert(
+                            com.uma.workbench.agent.AgentToolApprovalRecordEntity(
+                                id = java.util.UUID.randomUUID().toString(),
+                                runId = request.callId, // callId 全局唯一，runId 暂复用
+                                callId = request.callId,
+                                toolName = request.toolName,
+                                riskLevel = request.riskLevel.name,
+                                approved = decision.approved,
+                                reason = decision.reason,
+                                timestamp = System.currentTimeMillis()
+                            )
+                        )
+                }
+            }
+        }
+    )
 
     /** Agent 当前对话模式持久化。 */
     val modePreferences by lazy {

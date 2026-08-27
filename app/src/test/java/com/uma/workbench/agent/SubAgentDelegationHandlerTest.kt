@@ -25,6 +25,17 @@ class SubAgentDelegationHandlerTest {
   assertEquals(ReadonlyAgentToolSchemas.childInvestigation,childTools);assertFalse(childTools.toString().contains("delegate_subagents"))
  }
 
+ @Test fun compactReportParsesTaskCardMetrics(){
+  val json="""{"type":"sub_agent_reports","tasks":[{"taskId":"t1","status":"success","requestId":"r1","totalTokens":1200,"roundsCount":3,"toolCallCount":7,"elapsedMillis":4500,"evidenceCount":5,"completeEvidenceCount":4}]}"""
+  val reports=SubAgentReportPresentation.parse(json)
+  org.junit.Assert.assertNotNull(reports);val r=reports!!.single()
+  org.junit.Assert.assertEquals(3,r.roundsCount);org.junit.Assert.assertEquals(7,r.toolCallCount);org.junit.Assert.assertEquals(4500L,r.elapsedMillis)
+  // 旧格式（无新字段）解析为 null，不崩
+  val legacy="""{"type":"sub_agent_reports","tasks":[{"taskId":"t2","status":"success","requestId":"r2","totalTokens":10,"evidenceCount":1,"completeEvidenceCount":1}]}"""
+  val lr=SubAgentReportPresentation.parse(legacy)!!.single()
+  org.junit.Assert.assertNull(lr.roundsCount);org.junit.Assert.assertNull(lr.toolCallCount);org.junit.Assert.assertNull(lr.elapsedMillis)
+ }
+
  @Test fun invalidUnknownTaskPropertyBecomesVisibleToolFailure()=runBlocking{
   val coordinator=SubAgentCoordinator(SubAgentLoopFactory{ReadonlyAgentLoop(AiStreamingProvider{flow{emit(AiStreamEvent.TextDelta("unused"));emit(AiStreamEvent.Completed)}},ReadonlyAgentToolExecutor(source))});val executor=ReadonlyAgentToolExecutor(source);val call=AiToolCall(0,"d","delegate_subagents","{\"tasks\":[{\"id\":\"x\",\"instruction\":\"y\",\"unknown\":1}]}");val outcome=executor.executeSpecial(call){SubAgentDelegationHandler(coordinator).execute(AiGenerationRequest("p",emptyList(),"m"),call)};assertTrue((outcome as AgentToolOutcome.Failure).failure.completeError.contains("未知参数"))
  }

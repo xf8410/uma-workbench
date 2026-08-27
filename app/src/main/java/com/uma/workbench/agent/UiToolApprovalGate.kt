@@ -18,7 +18,9 @@ import java.util.UUID
  * 同时维护一个 [pending] 状态流供 Compose 观察并渲染对话框。
  */
 class UiToolApprovalGate(
-    private val autoApproveReadOnly: Boolean = true
+    private val autoApproveReadOnly: Boolean = true,
+    /** 每次审批决定（含自动批准）的审计回调；抛错不影响审批结果。 */
+    private val onDecision: ((ToolApprovalRequest, ToolApprovalDecision) -> Unit)? = null
 ) : ToolApprovalGate {
 
     /** 一次请求的句柄：含请求体 + 唤醒用 deferred。 */
@@ -42,11 +44,13 @@ class UiToolApprovalGate(
 
     override suspend fun requestApproval(request: ToolApprovalRequest): ToolApprovalDecision {
         if (autoApproveReadOnly && request.riskLevel == ToolRiskLevel.READ_ONLY) {
-            return ToolApprovalDecision(
+            val auto = ToolApprovalDecision(
                 callId = request.callId,
                 approved = true,
                 reason = "只读工具自动批准"
             )
+            notifyDecision(request, auto)
+            return auto
         }
         val deferred = CompletableDeferred<ToolApprovalDecision>()
         val handle = Pending(
@@ -57,7 +61,9 @@ class UiToolApprovalGate(
         _pending.value = _pending.value + handle
         _events.emit(request)
         return try {
-            deferred.await()
+            val decision = deferred.await()
+            notifyDecision(request, decision)
+            decision
         } finally {
             _pending.value = _pending.value.filterNot { it.requestId == handle.requestId }
         }
@@ -66,9 +72,15 @@ class UiToolApprovalGate(
     /** UI 提交审批结果。 */
     fun respond(callId: String, approved: Boolean, reason: String? = null) {
         val decision = ToolApprovalDecision(callId, approved, reason)
+        // 决定的审计记录由 requestApproval 的 await 分支统一落，避免双重记录
         _pending.value.firstOrNull { it.request.callId == callId }?.complete(decision)
     }
 
     /** 当前是否有等待中的请求。 */
     fun hasPending(): Boolean = _pending.value.isNotEmpty()
+
+    private fun notifyDecision(request: ToolApprovalRequest, decision: ToolApprovalDecision) {
+        val sink = onDecision ?: return
+        runCatching { sink(request, decision) }
+    }
 }

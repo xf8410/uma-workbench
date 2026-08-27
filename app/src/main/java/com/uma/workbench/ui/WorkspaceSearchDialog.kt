@@ -10,6 +10,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun WorkspaceSearchDialog(vm: AiChatViewModel, onDismiss: () -> Unit) {
     val page by vm.searchPage.collectAsStateWithLifecycle()
@@ -17,6 +18,19 @@ fun WorkspaceSearchDialog(vm: AiChatViewModel, onDismiss: () -> Unit) {
     val loadingAttachment by vm.loadingAttachment.collectAsStateWithLifecycle()
     var query by remember { mutableStateOf(page?.query.orEmpty()) }
     var caseSensitive by remember { mutableStateOf(page?.caseSensitive ?: false) }
+    val historyPrefs = androidx.compose.ui.platform.LocalContext.current
+        .getSharedPreferences("workspace_search_history", android.content.Context.MODE_PRIVATE)
+    // CSV 存储：StringSet 会丢失插入顺序，历史要"最近的在前"
+    fun loadHistory(): List<String> =
+        historyPrefs.getString("queries_csv", null)?.split('│')?.filter { it.isNotBlank() } ?: emptyList()
+    var history by remember { mutableStateOf(loadHistory()) }
+    fun recordSearch(term: String) {
+        val trimmed = term.trim()
+        if (trimmed.isBlank()) return
+        val updated = (listOf(trimmed) + loadHistory().filterNot { it == trimmed }).take(10)
+        historyPrefs.edit { putString("queries_csv", updated.joinToString("│")) }
+        history = updated
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -36,9 +50,33 @@ fun WorkspaceSearchDialog(vm: AiChatViewModel, onDismiss: () -> Unit) {
                         Text("区分大小写")
                     }
                     Button(
-                        onClick = { vm.searchWorkspace(query, caseSensitive) },
+                        onClick = {
+                            recordSearch(query)
+                            vm.searchWorkspace(query, caseSensitive)
+                        },
                         enabled = query.isNotBlank() && !searching
                     ) { Text(if (searching) "搜索中" else "搜索") }
+                }
+                if (history.isNotEmpty()) {
+                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("最近搜索", style = MaterialTheme.typography.labelSmall)
+                            TextButton(onClick = {
+                                historyPrefs.edit { putString("queries_csv", null) }
+                                history = emptyList()
+                            }) { Text("清空", style = MaterialTheme.typography.labelSmall) }
+                        }
+                        androidx.compose.foundation.layout.FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            history.forEach { term ->
+                                AssistChip(onClick = {
+                                    query = term
+                                    vm.searchWorkspace(term, caseSensitive)
+                                }, label = { Text(term) })
+                            }
+                        }
+                    }
                 }
                 page?.let { result ->
                     Text(
