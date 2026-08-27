@@ -1,5 +1,6 @@
 package com.uma.workbench.agent
 
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -37,7 +38,7 @@ class UiToolApprovalGateTest {
                 onDecision = { req, dec -> decisions.add(req to dec) }
             )
             val deferred = kotlinx.coroutines.CompletableDeferred<Unit>()
-            val requester = kotlinx.coroutines.async {
+            val requester = async {
                 val decision = gate.requestApproval(request())
                 deferred.complete(Unit)
                 decision
@@ -60,9 +61,7 @@ class UiToolApprovalGateTest {
             val gate = UiToolApprovalGate(
                 onDecision = { _, _ -> error("审计写入失败") }
             )
-            val requester = kotlinx.coroutines.async {
-                gate.requestApproval(request())
-            }
+            val requester = async { gate.requestApproval(request()) }
             kotlinx.coroutines.withTimeout(5000) {
                 while (gate.hasPending().not()) kotlinx.coroutines.delay(10)
             }
