@@ -26,12 +26,12 @@ class SubAgentDelegationHandlerTest {
  }
 
  @Test fun compactReportParsesTaskCardMetrics(){
-  val json="""{"type":"sub_agent_reports","tasks":[{"taskId":"t1","status":"success","requestId":"r1","totalTokens":1200,"roundsCount":3,"toolCallCount":7,"elapsedMillis":4500,"evidenceCount":5,"completeEvidenceCount":4}]}"""
+  val json="""{"type":"sub_agent_reports","reports":[{"taskId":"t1","status":"success","requestId":"r1","totalTokens":1200,"roundsCount":3,"toolCallCount":7,"elapsedMillis":4500,"evidenceCount":5,"completeEvidenceCount":4}]}"""
   val reports=SubAgentReportPresentation.parse(json)
   org.junit.Assert.assertNotNull(reports);val r=reports!!.single()
   org.junit.Assert.assertEquals(3,r.roundsCount);org.junit.Assert.assertEquals(7,r.toolCallCount);org.junit.Assert.assertEquals(4500L,r.elapsedMillis)
   // 旧格式（无新字段）解析为 null，不崩
-  val legacy="""{"type":"sub_agent_reports","tasks":[{"taskId":"t2","status":"success","requestId":"r2","totalTokens":10,"evidenceCount":1,"completeEvidenceCount":1}]}"""
+  val legacy="""{"type":"sub_agent_reports","reports":[{"taskId":"t2","status":"success","requestId":"r2","totalTokens":10,"evidenceCount":1,"completeEvidenceCount":1}]}"""
   val lr=SubAgentReportPresentation.parse(legacy)!!.single()
   org.junit.Assert.assertNull(lr.roundsCount);org.junit.Assert.assertNull(lr.toolCallCount);org.junit.Assert.assertNull(lr.elapsedMillis)
  }
