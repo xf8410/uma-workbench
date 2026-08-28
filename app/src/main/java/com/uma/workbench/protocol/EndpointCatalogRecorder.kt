@@ -53,18 +53,38 @@ class EndpointCatalogRecorder(private val db: AppDatabase) {
         )
     }
 
-    /** 从请求体粗略提取顶层 JSON 键名，用于端点目录的 jsonFields；无法解析返回 null。 */
+    /**
+     * 从请求体提取**顶层** JSON 键名，用于端点目录的 jsonFields。
+     * 只抓对象最外层的 `"key":`，跳过嵌套对象/数组里的键。无法解析返回 null。
+     */
     companion object {
         internal fun jsonKeys(body: String): String? {
             val trimmed = body.trim()
             if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return null
-            return Regex("\"([A-Za-z0-9_]+)\"\\s*:")
-                .findAll(trimmed)
-                .map { it.groupValues[1] }
-                .distinct()
-                .take(32)
-                .joinToString(",")
-                .ifBlank { null }
+            val keys = mutableListOf<String>()
+            var depth = 0
+            var i = 0
+            while (i < trimmed.length) {
+                when (trimmed[i]) {
+                    '{', '[' -> depth++
+                    '}', ']' -> depth--
+                    '"' -> {
+                        if (depth == 1) {
+                            val endQuote = trimmed.indexOf('"', i + 1)
+                            if (endQuote > i) {
+                                val after = trimmed.substring(endQuote + 1).trimStart()
+                                if (after.startsWith(":")) {
+                                    val key = trimmed.substring(i + 1, endQuote)
+                                    if (key.matches(Regex("[A-Za-z0-9_]+"))) keys.add(key)
+                                }
+                                i = endQuote
+                            }
+                        }
+                    }
+                }
+                i++
+            }
+            return keys.distinct().take(32).joinToString(",").ifBlank { null }
         }
     }
 }
