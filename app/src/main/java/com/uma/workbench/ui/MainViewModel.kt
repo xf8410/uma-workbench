@@ -45,6 +45,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val hlpatchState = MutableStateFlow(hlpatchClient.state)
     val hlpatchCapabilities = MutableStateFlow(HlpatchCapabilityReport())
 
+    // 阶段18：游戏端点目录——协议请求经过的端点清单(按工作区观察)
+    val endpointCatalog: StateFlow<List<EndpointCatalogEntity>> = _currentWorkspaceId.flatMapLatest { id ->
+        if (id == null) flowOf(emptyList()) else db.endpointCatalog().observe(id)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     private val allSources = repository.sources()
     private val allWorkItems = repository.workItems()
     val importRows: StateFlow<List<ImportStatusRow>> = combine(_currentWorkspaceId, allSources, allWorkItems) { workspaceId, sources, workItems ->
@@ -57,6 +62,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val protocolHistoryTimeline = ProtocolHistoryTimeline(protocolHistoryStore::all)
     private val protocolHistoryInspector = ProtocolHistoryInspector()
     private val protocolSender = ProtocolSender(application, db, hlpatchClient, protocolHistoryStore)
+    private val endpointCatalogRecorder = EndpointCatalogRecorder(db)
     private val sidHealthProbe = SidHealthProbe()
     val activeSession = sessionManager.activeSession
     val protocolLogs: StateFlow<List<ProtocolLogEntry>> = protocolSender.logs
@@ -148,7 +154,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun sendProtocolRequest(endpoint: String, sid: String, viewerId: Long?, body: String, channel: Int) = viewModelScope.launch {
         val ep = GameEndpoint.fromPath(endpoint); val req = GameRequest(ep, sid.ifBlank { null }, viewerId, body, headers = sessionManager.buildHeaders(activeSession.value), rawEndpoint = endpoint)
-        runCatching { if (channel == 2) protocolSender.sendViaHlpatch(req) else throw IllegalStateException("直连服务器地址尚未由真实配置提供；请求未发送，完整输入仍保留") }
+        val response = runCatching {
+            when (channel) {
+                2 -> protocolSender.sendViaHlpatch(req)
+                else -> throw IllegalStateException("直连服务器地址尚未由真实配置提供；请求未发送，完整输入仍保留")
+            }
+        }.getOrNull()
+        // 阶段18：无论成功/失败/未发送，都把端点归纳进游戏端点目录
+        endpointCatalogRecorder.record(req, response, _currentWorkspaceId.value, activeSession.value?.appVer)
         protocolHistoryTimeline.reload()
     }
 
