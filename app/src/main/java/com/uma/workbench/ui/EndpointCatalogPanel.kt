@@ -36,7 +36,7 @@ fun EndpointCatalogPanel(vm: MainViewModel) {
             if (entries.isEmpty()) {
                 Text("暂无可用的端点记录（发送协议请求后会自动归纳）", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
             } else {
-                LazyColumn(Modifier.fillMaxWidth()) {
+                LazyColumn(Modifier.fillMaxWidth().height(180.dp)) {
                     items(entries, key = { it.id }) { e -> EndpointCatalogRow(e, timeFormat) }
                 }
             }
