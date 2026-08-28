@@ -12,15 +12,11 @@
         android:icon="@drawable/workbench_mascot"
         android:allowBackup="true"
         android:supportsRtl="true">
+        <!-- GitHub 仓库浏览改为应用内功能，不再作为独立启动入口（避免出现第二个 App 图标） -->
         <activity
             android:name=".GitHubActivity"
             android:exported="true"
-            android:label="GitHub 仓库">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
+            android:label="GitHub 仓库" />
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
