@@ -1,5 +1,6 @@
 package com.uma.workbench
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -21,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
@@ -116,6 +118,7 @@ private fun TraeLayout(
     networkState: NetworkState,
     hlpatchState: HlpatchClient.ConnectionState
 ) {
+    val context = LocalContext.current
     var activeBottomTab by remember { mutableIntStateOf(0) }
     val projects by vm.projects.collectAsStateWithLifecycle()
     val recentFiles by vm.recentFiles.collectAsStateWithLifecycle()
@@ -137,6 +140,7 @@ private fun TraeLayout(
                 IconButton({ vm.closeWorkspace() }, Modifier.size(28.dp)) { Icon(Icons.Default.Home, null, tint = WorkbenchColors.textSecondary) }
                 Text(ws.name, color = WorkbenchColors.textPrimary)
                 Spacer(Modifier.weight(1f))
+                IconButton({ context.startActivity(Intent(context, GitHubActivity::class.java)) }, Modifier.size(28.dp)) { Icon(Icons.Default.Code, null, tint = WorkbenchColors.textSecondary) }
                 Text("hlpatch:${hlpatchState.name} · ${networkState.name}", color = WorkbenchColors.textMuted, style = MaterialTheme.typography.labelSmall)
             }
             Row(Modifier.weight(1f)) {
