@@ -158,7 +158,15 @@ class GitHubApiClient(
         val status = connection.responseCode
         val body = (if (status in 200..299) connection.inputStream else connection.errorStream)
             ?.bufferedReader()?.use { it.readText() }.orEmpty()
-        if (status !in 200..299) throw GitHubApiException(status, body)
+        if (status !in 200..299) {
+            val hint = when (status) {
+                404 -> "（GitHub 404：仓库不存在，或您的 Token 无该仓库访问权限。私有仓库需授予 Contents: Read / repo 权限，组织仓库还需 SSO 授权。）"
+                403 -> "（GitHub 403：Token 权限不足。请确认 Token 有 repo / Contents: Read 权限，或已通过组织 SSO 授权。）"
+                401 -> "（GitHub 401：Token 无效或已过期，请重新登录。）"
+                else -> ""
+            }
+            throw GitHubApiException(status, body + hint)
+        }
         json.parseToJsonElement(body)
     }
 
