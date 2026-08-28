@@ -1,5 +1,6 @@
 package com.uma.workbench
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -21,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
@@ -32,6 +34,8 @@ import com.uma.workbench.agent.ActiveWorkspaceDocumentBridge
 import com.uma.workbench.agent.AgentPartnerViewModel
 import com.uma.workbench.data.WorkspaceEntity
 import com.uma.workbench.hlpatch.HlpatchClient
+import com.uma.workbench.knowledge.KnowledgePanel
+import com.uma.workbench.knowledge.KnowledgeViewModel
 import com.uma.workbench.network.NetworkState
 import com.uma.workbench.protocol.GameEndpoint
 import com.uma.workbench.protocol.ProtocolEditorDefaultsFactory
@@ -52,14 +56,15 @@ fun WorkbenchApp(
     aiConfigVm: AiConfigurationViewModel = viewModel(),
     lanModelVm: LanModelViewModel = viewModel(),
     aiChatVm: AiChatViewModel = viewModel(),
-    agentPartnerVm: AgentPartnerViewModel = viewModel()
+    agentPartnerVm: AgentPartnerViewModel = viewModel(),
+    knowledgeVm: KnowledgeViewModel = viewModel()
 ) {
     val workspaces by vm.workspaces.collectAsStateWithLifecycle()
     val currentWs by vm.currentWorkspace.collectAsStateWithLifecycle()
     val networkState by vm.networkState.collectAsStateWithLifecycle()
     val hlpatchState by vm.hlpatchState.collectAsStateWithLifecycle()
     if (currentWs == null) WorkspacePicker(workspaces, vm)
-    else TraeLayout(vm, aiConfigVm, lanModelVm, aiChatVm, agentPartnerVm, currentWs!!, networkState, hlpatchState)
+    else TraeLayout(vm, aiConfigVm, lanModelVm, aiChatVm, agentPartnerVm, knowledgeVm, currentWs!!, networkState, hlpatchState)
 }
 
 @Composable
@@ -112,10 +117,12 @@ private fun TraeLayout(
     lanModelVm: LanModelViewModel,
     aiChatVm: AiChatViewModel,
     agentPartnerVm: AgentPartnerViewModel,
+    knowledgeVm: KnowledgeViewModel,
     ws: WorkspaceEntity,
     networkState: NetworkState,
     hlpatchState: HlpatchClient.ConnectionState
 ) {
+    val context = LocalContext.current
     var activeBottomTab by remember { mutableIntStateOf(0) }
     val projects by vm.projects.collectAsStateWithLifecycle()
     val recentFiles by vm.recentFiles.collectAsStateWithLifecycle()
@@ -137,6 +144,7 @@ private fun TraeLayout(
                 IconButton({ vm.closeWorkspace() }, Modifier.size(28.dp)) { Icon(Icons.Default.Home, null, tint = WorkbenchColors.textSecondary) }
                 Text(ws.name, color = WorkbenchColors.textPrimary)
                 Spacer(Modifier.weight(1f))
+                IconButton({ context.startActivity(Intent(context, GitHubActivity::class.java)) }, Modifier.size(28.dp)) { Icon(Icons.Default.Code, null, tint = WorkbenchColors.textSecondary) }
                 Text("hlpatch:${hlpatchState.name} · ${networkState.name}", color = WorkbenchColors.textMuted, style = MaterialTheme.typography.labelSmall)
             }
             Row(Modifier.weight(1f)) {
@@ -158,6 +166,7 @@ private fun TraeLayout(
                         4 -> AiChatScreen(aiChatVm) { activeBottomTab = 5 }
                         5 -> AiConfigurationScreen(aiConfigVm, lanModelVm)
                         6 -> AgentPartnerPanel(agentPartnerVm, ws.id) { activeBottomTab = 0 }
+                        7 -> KnowledgePanel(knowledgeVm, ws.id)
                         else -> {
                             if (openTabs.isNotEmpty()) Row(Modifier.fillMaxWidth().height(32.dp).horizontalScroll(rememberScrollState())) {
                                 openTabs.forEach { tab ->
@@ -178,7 +187,7 @@ private fun TraeLayout(
                 }
             }
             Row(Modifier.fillMaxWidth().height(28.dp).background(WorkbenchColors.bgSecondary).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
-                listOf("代码", "历史", "协议", "导入索引", "AI 聊天", "AI 配置", "伙伴与群聊").forEachIndexed { index, label ->
+                listOf("代码", "历史", "协议", "导入索引", "AI 聊天", "AI 配置", "伙伴与群聊", "知识").forEachIndexed { index, label ->
                     Text(label, color = if (index == activeBottomTab) WorkbenchColors.accent else WorkbenchColors.textMuted, modifier = Modifier.clickable {
                         activeBottomTab = index
                         if (index == 4) aiChatVm.refreshConfiguration()
@@ -244,5 +253,6 @@ private fun ProtocolPanel(vm: MainViewModel) {
         }
         OutlinedTextField(bodyInput, { bodyInput = it }, label = { Text("可编辑请求体模板") }, modifier = Modifier.fillMaxWidth().weight(1f), textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace))
         Text(if (logs.isEmpty()) "暂无协议日志" else logs.last().let { "${it.request.endpoint.path}: ${it.response?.protocolCode?.label ?: it.error ?: "无响应"}" }, color = WorkbenchColors.textMuted, style = MaterialTheme.typography.labelSmall, maxLines = 2, overflow = TextOverflow.Clip)
+        EndpointCatalogPanel(vm)
     }
 }
