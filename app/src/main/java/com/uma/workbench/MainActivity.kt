@@ -32,6 +32,8 @@ import com.uma.workbench.agent.ActiveWorkspaceDocumentBridge
 import com.uma.workbench.agent.AgentPartnerViewModel
 import com.uma.workbench.data.WorkspaceEntity
 import com.uma.workbench.hlpatch.HlpatchClient
+import com.uma.workbench.knowledge.KnowledgePanel
+import com.uma.workbench.knowledge.KnowledgeViewModel
 import com.uma.workbench.network.NetworkState
 import com.uma.workbench.protocol.GameEndpoint
 import com.uma.workbench.protocol.ProtocolEditorDefaultsFactory
@@ -52,14 +54,15 @@ fun WorkbenchApp(
     aiConfigVm: AiConfigurationViewModel = viewModel(),
     lanModelVm: LanModelViewModel = viewModel(),
     aiChatVm: AiChatViewModel = viewModel(),
-    agentPartnerVm: AgentPartnerViewModel = viewModel()
+    agentPartnerVm: AgentPartnerViewModel = viewModel(),
+    knowledgeVm: KnowledgeViewModel = viewModel()
 ) {
     val workspaces by vm.workspaces.collectAsStateWithLifecycle()
     val currentWs by vm.currentWorkspace.collectAsStateWithLifecycle()
     val networkState by vm.networkState.collectAsStateWithLifecycle()
     val hlpatchState by vm.hlpatchState.collectAsStateWithLifecycle()
     if (currentWs == null) WorkspacePicker(workspaces, vm)
-    else TraeLayout(vm, aiConfigVm, lanModelVm, aiChatVm, agentPartnerVm, currentWs!!, networkState, hlpatchState)
+    else TraeLayout(vm, aiConfigVm, lanModelVm, aiChatVm, agentPartnerVm, knowledgeVm, currentWs!!, networkState, hlpatchState)
 }
 
 @Composable
@@ -112,6 +115,7 @@ private fun TraeLayout(
     lanModelVm: LanModelViewModel,
     aiChatVm: AiChatViewModel,
     agentPartnerVm: AgentPartnerViewModel,
+    knowledgeVm: KnowledgeViewModel,
     ws: WorkspaceEntity,
     networkState: NetworkState,
     hlpatchState: HlpatchClient.ConnectionState
@@ -158,6 +162,7 @@ private fun TraeLayout(
                         4 -> AiChatScreen(aiChatVm) { activeBottomTab = 5 }
                         5 -> AiConfigurationScreen(aiConfigVm, lanModelVm)
                         6 -> AgentPartnerPanel(agentPartnerVm, ws.id) { activeBottomTab = 0 }
+                        7 -> KnowledgePanel(knowledgeVm, ws.id)
                         else -> {
                             if (openTabs.isNotEmpty()) Row(Modifier.fillMaxWidth().height(32.dp).horizontalScroll(rememberScrollState())) {
                                 openTabs.forEach { tab ->
@@ -178,7 +183,7 @@ private fun TraeLayout(
                 }
             }
             Row(Modifier.fillMaxWidth().height(28.dp).background(WorkbenchColors.bgSecondary).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
-                listOf("代码", "历史", "协议", "导入索引", "AI 聊天", "AI 配置", "伙伴与群聊").forEachIndexed { index, label ->
+                listOf("代码", "历史", "协议", "导入索引", "AI 聊天", "AI 配置", "伙伴与群聊", "知识").forEachIndexed { index, label ->
                     Text(label, color = if (index == activeBottomTab) WorkbenchColors.accent else WorkbenchColors.textMuted, modifier = Modifier.clickable {
                         activeBottomTab = index
                         if (index == 4) aiChatVm.refreshConfiguration()
