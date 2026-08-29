@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable data class AiApiCredential(val id:String=UUID.randomUUID().toString(),val label:String,val secret:String,val enabled:Boolean=true)
 @Serializable data class AiProviderProfile(
- val id:String=UUID.randomUUID().toString(),val name:String,val baseUrl:String,val chatPath:String="/chat/completions",val modelsPath:String="/models",val credentials:List<AiApiCredential> = emptyList(),val selectedCredentialId:String?=null,val models:List<String> = emptyList(),val protocol:CustomAiApiProtocol=CustomAiApiProtocol(),val headersJson:String=AiRequestHeaders.DEFAULT_JSON
+ val id:String=UUID.randomUUID().toString(),val name:String,val baseUrl:String,val chatPath:String="/chat/completions",val modelsPath:String="/models",val credentials:List<AiApiCredential> = emptyList(),val selectedCredentialId:String?=null,val models:List<String> = emptyList(),val protocol:CustomAiApiProtocol=CustomAiApiProtocol(),val headersJson:String=AiRequestHeaders.DEFAULT_JSON,val thinkingLevel:String?=null
 ){
  val activeCredential:AiApiCredential? get()=credentials.firstOrNull{it.id==selectedCredentialId&&it.enabled}?:credentials.firstOrNull{it.enabled}
  val configured:Boolean get()=baseUrl.startsWith("https://")&&(!AiRequestHeaders.requiresCredential(headersJson)||activeCredential!=null)

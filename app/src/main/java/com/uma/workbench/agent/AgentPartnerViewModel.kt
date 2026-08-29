@@ -23,6 +23,24 @@ sealed class AgentGenerationState {
 class AgentPartnerViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application as com.uma.workbench.WorkbenchApplication
     private val store = app.agentPartnerStore
+    private val agentDb = com.uma.workbench.agent.AgentPartnerDatabase.get(app)
+    private val _recentRuns = MutableStateFlow<List<AgentRunEntity>>(emptyList())
+    val recentRuns: StateFlow<List<AgentRunEntity>> = _recentRuns.asStateFlow()
+    private val _runToolRecords = MutableStateFlow<List<AgentToolCallRecordEntity>>(emptyList())
+    val runToolRecords: StateFlow<List<AgentToolCallRecordEntity>> = _runToolRecords.asStateFlow()
+
+    /** 分配记录：拉取最近的 Agent 运行（含每次工具调用统计）。 */
+    fun loadRecentRuns() = viewModelScope.launch {
+        runCatching { agentDb.agentRuns().recentRuns(50) }.onSuccess { _recentRuns.value = it }
+    }
+
+    /** 展开某次运行的完整工具调用记录。 */
+    fun loadRunToolRecords(runId: String) = viewModelScope.launch {
+        runCatching { agentDb.toolCallRecords().listByRun(runId) }.onSuccess { _runToolRecords.value = it }
+    }
+
+    /** 持久对话进化：伙伴日记（跨对话沉淀，按日期倒序）。 */
+    fun observeDiaries(agentId: String) = store.observeDiaries(agentId)
     private val catalogStore = AiProviderCatalogStore(application)
     private val provider = CatalogAiStreamingProvider {
         val cat = catalogStore.load()

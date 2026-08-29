@@ -39,6 +39,7 @@ import com.uma.workbench.WorkbenchApplication
 import com.uma.workbench.github.GitHubConfirmationStore
 import com.uma.workbench.github.GitHubRemoteOperation
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -77,6 +78,12 @@ fun AgentPartnerPanel(
     var creatingProfile by remember { mutableStateOf(false) }
     var creatingGroup by remember { mutableStateOf(false) }
     var editingGroupSettings by remember { mutableStateOf(false) }
+    var showingRuns by remember { mutableStateOf(false) }
+    var diaryAgent by remember { mutableStateOf<String?>(null) }
+    val recentRuns by viewModel.recentRuns.collectAsStateWithLifecycle()
+    val runToolRecords by viewModel.runToolRecords.collectAsStateWithLifecycle()
+    var expandedRunId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(showingRuns) { if (showingRuns) viewModel.loadRecentRuns() }
 
     val authorization = remember {
         val app = context.applicationContext as WorkbenchApplication
@@ -135,6 +142,7 @@ fun AgentPartnerPanel(
                     ) {
                         Text("自动日记", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
                         Row {
+                            TextButton(onClick = { showingRuns = true }) { Text("分配记录", fontSize = 12.sp) }
                             TextButton(onClick = { viewModel.generateDiaryNow() }) { Text("定时生成", fontSize = 12.sp) }
                             TextButton(onClick = { viewModel.triggerDiaryGeneration() }) { Text("立即生成全部", fontSize = 12.sp) }
                         }
@@ -150,8 +158,11 @@ fun AgentPartnerPanel(
                                     "${profile.name} · ${if (profile.enabled) "启用" else "停用"}",
                                     modifier = Modifier.weight(1f)
                                 )
+                                TextButton(onClick = { diaryAgent = profile.id }) {
+                                    Text("日记", fontSize = 12.sp)
+                                }
                                 TextButton(onClick = { viewModel.triggerDiaryGeneration(profile.id) }) {
-                                    Text("生成日记", fontSize = 12.sp)
+                                    Text("生成", fontSize = 12.sp)
                                 }
                             }
                         }
@@ -174,6 +185,24 @@ fun AgentPartnerPanel(
                 viewModel.createProfile(name, identity, soul, user)
                 creatingProfile = false
             }
+        )
+    }
+    if (showingRuns) {
+        AgentRunsDialog(
+            viewModel = viewModel,
+            runs = recentRuns,
+            toolRecords = runToolRecords,
+            expandedRunId = expandedRunId,
+            onExpand = { expandedRunId = it },
+            onDismiss = { showingRuns = false }
+        )
+    }
+    diaryAgent?.let { agentId ->
+        val profile = profiles.firstOrNull { it.id == agentId }
+        AgentDiaryDialog(
+            diaryFlow = viewModel.observeDiaries(agentId),
+            agentName = profile?.name ?: "伙伴",
+            onDismiss = { diaryAgent = null }
         )
     }
     if (creatingGroup) {
@@ -986,5 +1015,122 @@ internal fun ToolApprovalDialog(approvalGate: com.uma.workbench.agent.UiToolAppr
                 )
             }
         }
+    )
+}
+
+
+/** 分配记录：最近 Agent 运行 + 展开完整工具调用记录。 */
+@Composable
+private fun AgentRunsDialog(
+    viewModel: AgentPartnerViewModel,
+    runs: List<com.uma.workbench.agent.AgentRunEntity>,
+    toolRecords: List<com.uma.workbench.agent.AgentToolCallRecordEntity>,
+    expandedRunId: String?,
+    onExpand: (String?) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("分配记录 · 最近 ${runs.size} 次运行") },
+        text = {
+            Column(Modifier.fillMaxWidth().heightIn(max = 480.dp)) {
+                if (runs.isEmpty()) {
+                    Text("暂无运行记录。发送消息后这里会记录每次 Agent 运行：模型、Token、轮次与全部工具调用。")
+                } else {
+                    LazyColumn {
+                        items(runs, key = { it.id }) { run ->
+                            Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                                Row(
+                                    Modifier.fillMaxWidth().clickable {
+                                        if (expandedRunId == run.id) onExpand(null) else { onExpand(run.id); viewModel.loadRunToolRecords(run.id) }
+                                    },
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(
+                                            (run.model ?: "未知模型") + " · " + when (run.status) {
+                                                "COMPLETED" -> "完成"; "FAILED" -> "失败"; else -> run.status
+                                            },
+                                            fontSize = 13.sp
+                                        )
+                                        Text(
+                                            "Token ${run.totalTokens} · 轮次 ${run.roundsCount} · 工具 ${run.toolCallsCount} · ${java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(run.startedAt))}",
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                        )
+                                    }
+                                    Text(if (expandedRunId == run.id) "▼" else "▶", fontSize = 12.sp)
+                                }
+                                run.error?.let { Text("错误：$it", fontSize = 11.sp, color = MaterialTheme.colorScheme.error) }
+                                if (expandedRunId == run.id) {
+                                    val records = toolRecords.filter { it.runId == run.id }
+                                    if (records.isEmpty()) {
+                                        Text("该运行没有工具调用", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), modifier = Modifier.padding(start = 12.dp, top = 2.dp))
+                                    } else {
+                                        records.forEach { record ->
+                                            Text(
+                                                buildString {
+                                                    append(if (record.status == "ok") "✅" else "❌")
+                                                    append(" 第${record.roundIndex + 1}轮 ")
+                                                    append(record.toolName)
+                                                    append(" · ${record.elapsedMillis}ms")
+                                                    record.resultId?.let { append(" · 结果 $it") }
+                                                },
+                                                fontSize = 11.sp,
+                                                modifier = Modifier.padding(start = 12.dp, top = 2.dp)
+                                            )
+                                            record.error?.let {
+                                                Text("   $it", fontSize = 10.sp, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(start = 12.dp))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("关闭") } }
+    )
+}
+
+/** 持久对话进化：伙伴日记查看器。 */
+@Composable
+private fun AgentDiaryDialog(
+    diaryFlow: kotlinx.coroutines.flow.Flow<List<com.uma.workbench.agent.AgentDiaryEntryEntity>>,
+    agentName: String,
+    onDismiss: () -> Unit
+) {
+    val entries by diaryFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("$agentName 的日记（持久记忆）") },
+        text = {
+            Column(Modifier.fillMaxWidth().heightIn(max = 480.dp)) {
+                if (entries.isEmpty()) {
+                    Text("还没有日记。点击伙伴行的「生成」按钮，或上方「立即生成全部」，伙伴会从最近的对话中沉淀当天日记，跨对话长期演化。")
+                } else {
+                    LazyColumn {
+                        items(entries, key = { it.id }) { entry ->
+                            var expanded by remember(entry.id) { mutableStateOf(false) }
+                            Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { expanded = !expanded }) {
+                                Text("${entry.dateKey} · ${entry.title}", fontSize = 13.sp)
+                                if (expanded) {
+                                    Text(entry.content, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                                } else {
+                                    Text(
+                                        entry.content.take(60) + if (entry.content.length > 60) "…" else "",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("关闭") } }
     )
 }
