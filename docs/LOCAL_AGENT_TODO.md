@@ -36,3 +36,9 @@
 - 不声称能够把 Kimi K3、GLM-5.2 等超大模型的“智商”抽离后嵌入 APK。
 - 不把任何云 API 设为软件核心功能的前置条件。
 - 不允许未经确认的远程写入、发布、删除或凭据读取。
+
+## 摆设接线（2026-08-28）
+
+- [x] ModelOutputVerifier 接入聊天链路：每次回复完成后自动验证，徽章随消息持久化展示
+- [x] ExecutionBudget/ExecutionTier 接入聊天链路：输入区档位选择（快速/标准/深入/极限）映射 Agent 循环上限
+- [x] DeterministicAuditOrchestrator + audit 包确定性分析器接入：新增「确定性审计」tab，来源分析 + 证据落库，零模型调用

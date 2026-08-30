@@ -52,7 +52,8 @@ fun WorkbenchApp(
     aiConfigVm: AiConfigurationViewModel = viewModel(),
     lanModelVm: LanModelViewModel = viewModel(),
     aiChatVm: AiChatViewModel = viewModel(),
-    agentPartnerVm: AgentPartnerViewModel = viewModel()
+    agentPartnerVm: AgentPartnerViewModel = viewModel(),
+    auditVm: DeterministicAuditViewModel = viewModel()
 ) {
     val workspaces by vm.workspaces.collectAsStateWithLifecycle()
     val currentWs by vm.currentWorkspace.collectAsStateWithLifecycle()
@@ -158,6 +159,7 @@ private fun TraeLayout(
                         4 -> AiChatScreen(aiChatVm) { activeBottomTab = 5 }
                         5 -> AiConfigurationScreen(aiConfigVm, lanModelVm)
                         6 -> AgentPartnerPanel(agentPartnerVm, ws.id) { activeBottomTab = 0 }
+                        7 -> DeterministicAuditPanel(auditVm, ws.id)
                         else -> {
                             if (openTabs.isNotEmpty()) Row(Modifier.fillMaxWidth().height(32.dp).horizontalScroll(rememberScrollState())) {
                                 openTabs.forEach { tab ->
@@ -178,7 +180,7 @@ private fun TraeLayout(
                 }
             }
             Row(Modifier.fillMaxWidth().height(28.dp).background(WorkbenchColors.bgSecondary).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
-                listOf("代码", "历史", "协议", "导入索引", "AI 聊天", "AI 配置", "伙伴与群聊").forEachIndexed { index, label ->
+                listOf("代码", "历史", "协议", "导入索引", "AI 聊天", "AI 配置", "伙伴与群聊", "确定性审计").forEachIndexed { index, label ->
                     Text(label, color = if (index == activeBottomTab) WorkbenchColors.accent else WorkbenchColors.textMuted, modifier = Modifier.clickable {
                         activeBottomTab = index
                         if (index == 4) aiChatVm.refreshConfiguration()

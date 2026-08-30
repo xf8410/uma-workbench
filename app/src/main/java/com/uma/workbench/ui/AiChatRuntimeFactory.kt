@@ -14,6 +14,7 @@ import com.uma.workbench.agent.GitHubReadonlyAgentToolDataSource
 import com.uma.workbench.agent.ReadonlyAgentLoop
 import com.uma.workbench.agent.ReadonlyAgentRuntimeFactory
 import com.uma.workbench.agent.ReadonlyAgentToolDataSource
+import com.uma.workbench.agent.ExecutionTier
 import java.io.File
 
 /** Android composition boundary for a conversation-scoped main Agent runtime. */
@@ -22,12 +23,14 @@ internal object AiChatRuntimeFactory {
         app: WorkbenchApplication,
         provider: AiStreamingProvider,
         workspaceId: String,
-        conversationId: String
+        conversationId: String,
+        tier: ExecutionTier = ExecutionTier.STANDARD
     ): ReadonlyAgentLoop = create(
         filesDir = app.filesDir,
         provider = provider,
         workspaceId = workspaceId,
         conversationId = conversationId,
+        tier = tier,
         githubSource = app.githubReadonlyAgentSource,
         githubContributionSource = app.githubContributionAgentSource,
         githubCloneSource = app.githubCloneAgentSource,
@@ -48,7 +51,8 @@ internal object AiChatRuntimeFactory {
         githubContributionSource: GitHubContributionAgentToolDataSource? = null,
         githubCloneSource: GitHubCloneAgentToolDataSource? = null,
         approvalGate: ToolApprovalGate? = null,
-        modeProvider: () -> AgentMode = { AgentMode.ASK }
+        modeProvider: () -> AgentMode = { AgentMode.ASK },
+        tier: ExecutionTier = ExecutionTier.STANDARD
     ): ReadonlyAgentLoop {
         val resultStore = FileAgentToolResultStore(
             File(filesDir, "agent-tool-results/$workspaceId/$conversationId"),
@@ -59,6 +63,7 @@ internal object AiChatRuntimeFactory {
             provider = provider,
             source = workspaceSource,
             resultStore = resultStore,
+            rootLoopLimits = tier.toLoopLimits(),
             githubSource = githubSource,
             githubContributionSource = githubContributionSource,
             githubCloneSource = githubCloneSource,
