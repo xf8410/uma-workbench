@@ -1,6 +1,6 @@
 package com.uma.workbench.ui
 
-import com.uma.workbench.agent.OutputVerification
+import com.uma.workbench.agent.*
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -49,7 +49,7 @@ class AgentRunMetadataVerificationTest {
 
     @Test fun verificationWithSubAgentReportsCoexist() {
         val result = AgentToolResult("call", "delegate_subagents", "result-id", "manifest only", 0, 13, 12345, false, 0, "abc", 1)
-        val round = com.uma.workbench.agent.ReadonlyAgentRound(1, "", listOf(com.uma.workbench.agent.AiToolCall(0, "call", "delegate_subagents", "{}")), listOf(com.uma.workbench.agent.AgentToolOutcome.Success(result)), "m", null)
+        val round = ReadonlyAgentRound(1, "", listOf(AiToolCall(0, "call", "delegate_subagents", "{}")), listOf(AgentToolOutcome.Success(result)), "m", null)
         val metadata = AgentRunMetadata.appendVerification(AgentRunMetadata.toJson(listOf(round)), verification())
 
         assertEquals(listOf(PersistedSubAgentReportRef("result-id", 12345, "abc")), AgentRunMetadata.subAgentReportRefs(metadata))
