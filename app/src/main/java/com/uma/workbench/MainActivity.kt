@@ -60,7 +60,7 @@ fun WorkbenchApp(
     val networkState by vm.networkState.collectAsStateWithLifecycle()
     val hlpatchState by vm.hlpatchState.collectAsStateWithLifecycle()
     if (currentWs == null) WorkspacePicker(workspaces, vm)
-    else TraeLayout(vm, aiConfigVm, lanModelVm, aiChatVm, agentPartnerVm, currentWs!!, networkState, hlpatchState)
+    else TraeLayout(vm, aiConfigVm, lanModelVm, aiChatVm, agentPartnerVm, auditVm, currentWs!!, networkState, hlpatchState)
 }
 
 @Composable
@@ -113,6 +113,7 @@ private fun TraeLayout(
     lanModelVm: LanModelViewModel,
     aiChatVm: AiChatViewModel,
     agentPartnerVm: AgentPartnerViewModel,
+    auditVm: DeterministicAuditViewModel,
     ws: WorkspaceEntity,
     networkState: NetworkState,
     hlpatchState: HlpatchClient.ConnectionState
