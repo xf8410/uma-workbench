@@ -42,8 +42,8 @@ class AgentRunMetadataVerificationTest {
         val rounds = """[{"round":1,"calls":[{"id":"c1","name":"read_current_file","status":"success","resultId":"r1","totalCharacterCount":100,"sha256":"ff"}]}]"""
         val metadata = AgentRunMetadata.appendVerification(rounds, verification())
 
-        // rounds 引用解析不受附加的 verification 对象影响
-        assertEquals(1, AgentRunMetadata.subAgentReportRefs(metadata).size)
+        // verification 对象不引入假的 sub agent 引用，也不破坏原有解析
+        assertTrue(AgentRunMetadata.subAgentReportRefs(metadata).isEmpty())
         assertNotNull(AgentRunMetadata.verificationOf(metadata))
     }
 
