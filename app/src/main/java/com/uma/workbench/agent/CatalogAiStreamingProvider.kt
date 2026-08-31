@@ -18,7 +18,7 @@ class CatalogAiStreamingProvider(private val profile: () -> AiProviderProfile?) 
         val provider = profile() ?: error("请先在 AI 配置中选择默认模型")
         provider.validate()
         require(request.model in provider.models) { "模型 ${request.model} 不属于提供商 ${provider.name}" }
-        val adapter = CustomAiApiAdapter(provider.protocol)
+        val adapter = CustomAiApiAdapter(provider.protocol, provider.thinkingLevel)
         val connection = (URL(provider.chatUrl()).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             connectTimeout = 30_000

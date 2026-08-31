@@ -21,19 +21,30 @@ import kotlinx.serialization.json.*
         require(textPath.isNotBlank()) { "回复文本字段路径不能为空" }
         require(finishReasonPath.isNotBlank()) { "结束原因字段路径不能为空" }
     }
-    companion object { const val OPENAI_REQUEST_TEMPLATE = """{"model":{{modelJson}},"stream":true,"stream_options":{"include_usage":true},"messages":{{messagesJson}}{{toolsProperty}}}""" }
+    companion object { const val OPENAI_REQUEST_TEMPLATE = """{"model":{{modelJson}},"stream":true,"stream_options":{"include_usage":true},"messages":{{messagesJson}}{{thinkingProperty}}{{toolsProperty}}}""" }
 }
 
-class CustomAiApiAdapter(private val protocol: CustomAiApiProtocol, private val json: Json = Json { ignoreUnknownKeys = true }) {
+class CustomAiApiAdapter(
+    private val protocol: CustomAiApiProtocol,
+    /** 思考深度：null=不发送；minimal/low/medium/high → OpenAI 兼容 reasoning_effort 参数。 */
+    private val thinkingLevel: String? = null,
+    private val json: Json = Json { ignoreUnknownKeys = true }
+) {
     fun requestBody(request: AiGenerationRequest, configuredModel: String): String {
         protocol.validate()
         val messages = buildJsonArray { request.messages.forEach { add(messageJson(it)) } }
         val toolsProperty = request.tools?.takeIf { it.isNotEmpty() }?.let { ",\"tools\":$it,\"tool_choice\":\"auto\"" }.orEmpty()
+        val thinkingProperty = thinkingLevel
+            ?.takeIf { it in ThinkingLevels.effortValues }
+            ?.let { level -> ",\"reasoning_effort\":${JsonPrimitive(level)}" }
+            .orEmpty()
         return protocol.requestTemplate
             .replace("{{modelJson}}", JsonPrimitive(request.model ?: configuredModel).toString())
             .replace("{{messagesJson}}", messages.toString())
             .replace("{{requestIdJson}}", JsonPrimitive(request.requestId).toString())
             .replace("{{toolsJson}}", request.tools?.toString() ?: "[]")
+            .replace("{{thinkingJson}}", JsonPrimitive(thinkingLevel ?: "").toString())
+            .replace("{{thinkingProperty}}", thinkingProperty)
             .replace("{{toolsProperty}}", toolsProperty)
     }
 

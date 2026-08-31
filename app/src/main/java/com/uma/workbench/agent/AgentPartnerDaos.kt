@@ -70,6 +70,9 @@ interface AgentRunDao {
     @Query("SELECT * FROM agent_runs WHERE conversationId = :convId ORDER BY startedAt DESC")
     suspend fun listByConversation(convId: String): List<AgentRunEntity>
 
+    @Query("SELECT * FROM agent_runs ORDER BY startedAt DESC LIMIT :limit")
+    suspend fun recentRuns(limit: Int): List<AgentRunEntity>
+
     @Query("UPDATE agent_runs SET status = :status, completedAt = :completedAt, error = :error WHERE id = :id")
     suspend fun updateStatus(id: String, status: String, completedAt: Long?, error: String?)
 

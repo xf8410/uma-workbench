@@ -46,7 +46,18 @@ class GitHubApiClient(
     private val json = Json { ignoreUnknownKeys = true }
 
     suspend fun account(): GitHubAccount {
-        val value = get("/user").jsonObject
+        val value = runCatching { get("/user").jsonObject }.getOrElse {
+            // fine-grained PAT 未授予账号读取权限时 /user 返回 404/403；
+            // 用仓库列表的 owner 兜底识别登录名，令牌本身仍可用于仓库操作。
+            val repos = get("/user/repos?per_page=1&sort=updated").jsonArray
+            val owner = repos.firstOrNull()?.jsonObject?.get("owner")?.jsonObject
+            return GitHubAccount(
+                login = owner?.string("login") ?: "token-user",
+                id = owner?.long("id") ?: 0L,
+                avatarUrl = owner?.optionalString("avatar_url"),
+                name = "令牌用户（/user 不可读，通常为 fine-grained 令牌未授予账号权限）"
+            )
+        }
         return GitHubAccount(
             login = value.string("login"),
             id = value.long("id"),
