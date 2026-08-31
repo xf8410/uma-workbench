@@ -5,6 +5,9 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Android 14+（API 34）specialUse 前台服务必需；缺失时 DesktopPetService
+         startForeground 抛 SecurityException，桌宠功能整体崩溃 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <application
         android:name=".WorkbenchApplication"
         android:theme="@style/Theme.UMAWorkBench"

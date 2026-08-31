@@ -1,9 +1,13 @@
 package com.uma.workbench
 
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -40,9 +44,34 @@ import com.uma.workbench.ui.theme.WorkbenchColors
 import com.uma.workbench.ui.theme.WorkbenchTheme
 
 class MainActivity : ComponentActivity() {
+
+    private val notifPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { WorkbenchTheme { WorkbenchApp() } }
+        // Android 15+（targetSdk 35 起，含 Android 16 / ColorOS 16）强制 Edge-to-Edge：
+        // statusBarColor / navigationBarColor 失效，内容会绘制到系统栏后面。
+        // 显式启用并固定深色系统栏（浅色图标），与应用深色主题保持一致。
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+        )
+        // Android 13+ 通知是运行时权限：不申请则桌宠前台通知被系统静默吞掉
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notifPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+        setContent {
+            WorkbenchTheme {
+                // safeDrawing 避让状态栏/手势条/刘海/键盘：
+                // 修复 Edge-to-Edge 强制后内容顶进系统栏的问题
+                Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+                    WorkbenchApp()
+                }
+            }
+        }
     }
 }
 

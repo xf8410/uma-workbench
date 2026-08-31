@@ -3,8 +3,10 @@
     <style name="Theme.UMAWorkBench" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:colorAccent">#6750A4</item>
-        <item name="android:navigationBarColor">#FFFBFE</item>
-        <item name="android:statusBarColor">#FFFBFE</item>
-        <item name="android:windowLightStatusBar">true</item>
+        <!-- Android 15+/16 强制 Edge-to-Edge：statusBarColor / navigationBarColor /
+             windowLightStatusBar 均已失效，系统栏外观由 MainActivity 的
+             enableEdgeToEdge(SystemBarStyle) 统一控制（深色栏 + 浅色图标）。
+             windowBackground 配深色，消除启动白屏闪烁。 -->
+        <item name="android:windowBackground">#1E1E2E</item>
     </style>
 </resources>

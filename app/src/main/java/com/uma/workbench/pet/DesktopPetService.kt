@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
@@ -65,7 +66,17 @@ class DesktopPetService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, createNotification("桌宠运行中"))
+        // Android 14+（API 34）要求显式声明前台服务类型；配合 manifest 的
+        // FOREGROUND_SERVICE_SPECIAL_USE 权限，修复 specialUse 类型启动崩溃
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(
+                NOTIFICATION_ID,
+                createNotification("桌宠运行中"),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, createNotification("桌宠运行中"))
+        }
         showPet()
     }
 

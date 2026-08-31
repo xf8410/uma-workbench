@@ -49,3 +49,12 @@
 - [x] 内置本机回环桥插件：llama.cpp server / Ollama on Termux / MLC 等跑在本机时经 127.0.0.1 接入，权重不进 APK
 - [x] 独立配置存储 + ViewModel + 配置区 + 聊天页开关；解析优先级：本机小模型 > 局域网 > 云目录
 - [x] Manifest 放开明文 HTTP（Android 9+ 默认禁止，否则局域网/回环在真机上是摆设）；公网强制 HTTPS 由 LanModelEndpoint.validate() 应用层执行
+
+## 安卓16 / ColorOS 16 兼容（2026-09-01）
+
+- [x] compileSdk/targetSdk 升至 API 36（AGP 8.7.3→8.9.2，CI Gradle 8.9→8.11.1）
+- [x] Edge-to-Edge 强制适配：enableEdgeToEdge + 根布局 safeDrawing 避让，深色系统栏配浅色图标，修内容顶进系统栏
+- [x] 修复桌宠前台服务在 Android 14+ 崩溃：补 FOREGROUND_SERVICE_SPECIAL_USE 权限 + API 34+ 显式三参 startForeground
+- [x] POST_NOTIFICATIONS 运行时申请：桌宠通知在 Android 13+/ColorOS 上真正可见
+- [x] 启动主题 windowBackground 配深色 #1E1E2E，消除启动白屏闪烁
+- [x] 原生库 16KB 内存页对齐验证：libandroidx.graphics.path.so / libdatastore_shared_counter.so 的 PT_LOAD align 均为 0x4000，无需改动
