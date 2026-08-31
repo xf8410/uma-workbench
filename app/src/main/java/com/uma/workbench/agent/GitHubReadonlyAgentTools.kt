@@ -23,7 +23,7 @@ interface GitHubReadonlyAgentToolDataSource {
     suspend fun getWorkflowRuns(owner: String, name: String, page: Int): String
 }
 
-/** Pure renderer kept independent from Android and network code so bounds and redaction are unit-testable. */
+/** Pure renderer kept independent from Android and network code so bounds are unit-testable. */
 internal object GitHubReadonlyToolRenderer {
     const val MAX_FILE_BYTES = 750_000L
     const val MAX_DIRECTORY_ENTRIES = 500
