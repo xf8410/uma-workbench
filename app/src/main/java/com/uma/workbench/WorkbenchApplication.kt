@@ -71,6 +71,11 @@ class WorkbenchApplication : Application() {
     val lanModelStore by lazy {
         com.uma.workbench.agent.LanModelSettingsStore(this)
     }
+
+    /** 本机小模型运行时配置。 */
+    val localSmallModelStore by lazy {
+        com.uma.workbench.agent.LocalSmallModelSettingsStore(this)
+    }
     lateinit var githubCloneAgentSource: GitHubCloneAgentToolDataSource
         private set
     lateinit var agentPartnerStore: AgentPartnerStore

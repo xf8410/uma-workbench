@@ -54,14 +54,15 @@ fun WorkbenchApp(
     aiChatVm: AiChatViewModel = viewModel(),
     agentPartnerVm: AgentPartnerViewModel = viewModel(),
     auditVm: DeterministicAuditViewModel = viewModel(),
-    githubVm: GitHubViewModel = viewModel()
+    githubVm: GitHubViewModel = viewModel(),
+    localModelVm: LocalSmallModelViewModel = viewModel()
 ) {
     val workspaces by vm.workspaces.collectAsStateWithLifecycle()
     val currentWs by vm.currentWorkspace.collectAsStateWithLifecycle()
     val networkState by vm.networkState.collectAsStateWithLifecycle()
     val hlpatchState by vm.hlpatchState.collectAsStateWithLifecycle()
     if (currentWs == null) WorkspacePicker(workspaces, vm)
-    else TraeLayout(vm, aiConfigVm, lanModelVm, aiChatVm, agentPartnerVm, auditVm, githubVm, currentWs!!, networkState, hlpatchState)
+    else TraeLayout(vm, aiConfigVm, lanModelVm, localModelVm, aiChatVm, agentPartnerVm, auditVm, githubVm, currentWs!!, networkState, hlpatchState)
 }
 
 @Composable
@@ -112,6 +113,7 @@ private fun TraeLayout(
     vm: MainViewModel,
     aiConfigVm: AiConfigurationViewModel,
     lanModelVm: LanModelViewModel,
+    localModelVm: LocalSmallModelViewModel,
     aiChatVm: AiChatViewModel,
     agentPartnerVm: AgentPartnerViewModel,
     auditVm: DeterministicAuditViewModel,
@@ -160,7 +162,7 @@ private fun TraeLayout(
                 Column(Modifier.weight(1f)) {
                     when (activeBottomTab) {
                         4 -> AiChatScreen(aiChatVm) { activeBottomTab = 5 }
-                        5 -> AiConfigurationScreen(aiConfigVm, lanModelVm)
+                        5 -> AiConfigurationScreen(aiConfigVm, lanModelVm, localModelVm)
                         6 -> AgentPartnerPanel(agentPartnerVm, ws.id) { activeBottomTab = 0 }
                         7 -> DeterministicAuditPanel(auditVm, ws.id)
                         8 -> GitHubEntryScreen(githubVm)

@@ -11,7 +11,10 @@
         android:label="UMA Workbench"
         android:icon="@drawable/workbench_mascot"
         android:allowBackup="true"
-        android:supportsRtl="true">
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="true">
+        <!-- LAN/loopback HTTP 需要明文许可（Android 9+ 默认禁止）。公网地址强制 HTTPS 的约束由
+             LanModelEndpoint.validate() 在应用层执行，此处放开不改变该约束。 -->
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

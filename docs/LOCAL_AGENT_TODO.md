@@ -27,7 +27,7 @@
 - [x] Room 持久化 Agent Run、Tool Call、审批和 checkpoint
 - [x] AgentMode 权限矩阵 + 模式切换确认 + 系统提示注入
 - [x] 群聊/单聊统一接入审批门与模式权限
-- [ ] 本地小模型运行时可插拔，不将超大模型权重打包进 APK
+- [x] 本地小模型运行时可插拔，不将超大模型权重打包进 APK
 - [x] 局域网自托管模型连接（不要求厂商 API）
 - [x] 模型输出必须由确定性工具或证据引用验证
 
@@ -42,3 +42,10 @@
 - [x] ModelOutputVerifier 接入聊天链路：每次回复完成后自动验证，徽章随消息持久化展示
 - [x] ExecutionBudget/ExecutionTier 接入聊天链路：输入区档位选择（快速/标准/深入/极限）映射 Agent 循环上限
 - [x] DeterministicAuditOrchestrator + audit 包确定性分析器接入：新增「确定性审计」tab，来源分析 + 证据落库，零模型调用
+
+## 本机小模型运行时（2026-08-31）
+
+- [x] LocalSmallModelRuntime 插件契约 + 注册表：未来 JNI 内嵌引擎实现接口即可挂入，UI 与解析层只依赖注册表
+- [x] 内置本机回环桥插件：llama.cpp server / Ollama on Termux / MLC 等跑在本机时经 127.0.0.1 接入，权重不进 APK
+- [x] 独立配置存储 + ViewModel + 配置区 + 聊天页开关；解析优先级：本机小模型 > 局域网 > 云目录
+- [x] Manifest 放开明文 HTTP（Android 9+ 默认禁止，否则局域网/回环在真机上是摆设）；公网强制 HTTPS 由 LanModelEndpoint.validate() 应用层执行
