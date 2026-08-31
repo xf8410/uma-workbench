@@ -97,6 +97,12 @@ class DesktopPetService : Service() {
 
     private fun showPet() {
         if (petView != null) return
+        // ColorOS/MIUI 等默认拒绝悬浮窗：无权限时 addView 会抛 BadTokenException，
+        // 这里优雅跳过并停止服务，等用户在设置里授权后再开启
+        if (!Settings.canDrawOverlays(this)) {
+            stopSelf()
+            return
+        }
         val wm = getSystemService(WINDOW_SERVICE) as WindowManager
         windowManager = wm
 

@@ -58,3 +58,10 @@
 - [x] POST_NOTIFICATIONS 运行时申请：桌宠通知在 Android 13+/ColorOS 上真正可见
 - [x] 启动主题 windowBackground 配深色 #1E1E2E，消除启动白屏闪烁
 - [x] 原生库 16KB 内存页对齐验证：libandroidx.graphics.path.so / libdatastore_shared_counter.so 的 PT_LOAD align 均为 0x4000，无需改动
+
+## 桌宠接线 + ColorOS 悬浮窗守卫（2026-09-01）
+
+- [x] 桌宠服务原为孤儿代码（全仓库无启动入口）：AI 配置页新增「桌面宠物」设置区，开关启停服务并持久化
+- [x] showPet() 悬浮窗权限守卫：无权限优雅 stopSelf，不再 BadTokenException 崩溃
+- [x] 无悬浮窗权限时 UI 引导跳系统授权页，从授权页返回自动刷新状态
+- [x] versionCode 5 / versionName 1.3.1
