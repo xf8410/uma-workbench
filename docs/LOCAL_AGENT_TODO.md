@@ -65,3 +65,10 @@
 - [x] showPet() 悬浮窗权限守卫：无权限优雅 stopSelf，不再 BadTokenException 崩溃
 - [x] 无悬浮窗权限时 UI 引导跳系统授权页，从授权页返回自动刷新状态
 - [x] versionCode 5 / versionName 1.3.1
+
+## 悬浮胶囊顶栏（Agora 风格）+ 并行分支合并（2026-09-02）
+
+- [x] 合并并行会话 OpenRouter 免费模型自动发现（fce760d..08da315）进 main，AiConfigurationScreen 冲突按并集解决：OpenRouter + LAN + 本机小模型 + 桌宠四个设置区全保留
+- [x] 顶栏改 Agora 风格悬浮胶囊：safeDrawing 之外再下沉 16dp，48dp 高圆角胶囊（bgSurface），工作区名超长省略号，状态徽标不再挤压
+- [x] 底部标签栏同风格胶囊化：28dp→44dp 触控面积，底部留白不贴手势条
+- [x] versionCode 6 / versionName 1.4.0

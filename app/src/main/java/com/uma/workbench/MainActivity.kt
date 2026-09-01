@@ -168,11 +168,12 @@ private fun TraeLayout(
     }
     Surface(Modifier.fillMaxSize(), color = WorkbenchColors.bg) {
         Column {
-            Row(Modifier.fillMaxWidth().height(36.dp).background(WorkbenchColors.bgSecondary).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton({ vm.closeWorkspace() }, Modifier.size(28.dp)) { Icon(Icons.Default.Home, null, tint = WorkbenchColors.textSecondary) }
-                Text(ws.name, color = WorkbenchColors.textPrimary)
-                Spacer(Modifier.weight(1f))
-                Text("hlpatch:${hlpatchState.name} · ${networkState.name}", color = WorkbenchColors.textMuted, style = MaterialTheme.typography.labelSmall)
+            // Agora 风格悬浮胶囊顶栏（2026-09-02 用户反馈：顶栏太贴屏幕顶部、最上面的文字有时看不到）：
+            // safeDrawing 已避开状态栏/刘海，这里再额外下沉 16dp 留白 + 圆角胶囊造型，顶部内容明显下降、清晰可读
+            Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 16.dp, bottom = 8.dp).height(48.dp).clip(RoundedCornerShape(24.dp)).background(WorkbenchColors.bgSurface).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton({ vm.closeWorkspace() }, Modifier.size(32.dp)) { Icon(Icons.Default.Home, null, tint = WorkbenchColors.textSecondary) }
+                Text(ws.name, color = WorkbenchColors.textPrimary, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(horizontal = 4.dp))
+                Text("hlpatch:${hlpatchState.name} · ${networkState.name}", color = WorkbenchColors.textMuted, style = MaterialTheme.typography.labelSmall, maxLines = 1)
             }
             Row(Modifier.weight(1f)) {
                 Column(Modifier.width(220.dp).fillMaxHeight().background(WorkbenchColors.bgSecondary).padding(8.dp)) {
@@ -214,12 +215,13 @@ private fun TraeLayout(
                     }
                 }
             }
-            Row(Modifier.fillMaxWidth().height(28.dp).background(WorkbenchColors.bgSecondary).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
+            // 底部标签栏同风格悬浮胶囊：28dp→44dp 加大触控面积，底部留白不贴手势条
+            Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 10.dp).height(44.dp).clip(RoundedCornerShape(22.dp)).background(WorkbenchColors.bgSurface).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
                 listOf("代码", "历史", "协议", "导入索引", "AI 聊天", "AI 配置", "伙伴与群聊", "确定性审计", "GitHub").forEachIndexed { index, label ->
                     Text(label, color = if (index == activeBottomTab) WorkbenchColors.accent else WorkbenchColors.textMuted, modifier = Modifier.clickable {
                         activeBottomTab = index
                         if (index == 4) aiChatVm.refreshConfiguration()
-                    }.padding(horizontal = 10.dp))
+                    }.padding(horizontal = 12.dp))
                 }
             }
         }
