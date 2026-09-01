@@ -16,6 +16,25 @@ class WorkScheduler(context: Context) {
         manager.enqueueUniqueWork("audit-$workItemId", ExistingWorkPolicy.KEEP, request)
     }
 
+    /** OpenRouter 免费模型：每日周期刷新（保底）。 */
+    fun scheduleOpenRouterFreeModelsPeriodic() {
+        val request = PeriodicWorkRequestBuilder<OpenRouterFreeModelWorker>(24, TimeUnit.HOURS)
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.MINUTES)
+            .addTag("openrouter-free")
+            .build()
+        manager.enqueueUniquePeriodicWork("openrouter-free-daily", ExistingPeriodicWorkPolicy.KEEP, request)
+    }
+
+    /** OpenRouter 免费模型：立即刷新一次（启动兜底，KEEP 防重复）。 */
+    fun scheduleOpenRouterFreeModelsNow() {
+        val request = OneTimeWorkRequestBuilder<OpenRouterFreeModelWorker>()
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .addTag("openrouter-free")
+            .build()
+        manager.enqueueUniqueWork("openrouter-free-now", ExistingWorkPolicy.KEEP, request)
+    }
+
     fun scheduleSync() {
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())

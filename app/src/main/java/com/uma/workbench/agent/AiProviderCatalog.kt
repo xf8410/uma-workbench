@@ -20,3 +20,24 @@ import kotlinx.serialization.Serializable
  fun withModels(providerId:String,models:List<String>):AiProviderCatalog{val exact=models.map(String::trim).filter(String::isNotEmpty).distinct().sorted();val next=providers.map{if(it.id==providerId)it.copy(models=exact)else it};return copy(providers=next,defaultModel=defaultModel?.takeIf{s->next.any{it.id==s.providerId&&s.modelId in it.models}})}
  fun select(selection:AiModelSelection):AiProviderCatalog{require(providers.any{it.id==selection.providerId&&selection.modelId in it.models}){"模型不属于已配置提供商"};return copy(defaultModel=selection)}
 }
+
+fun AiProviderProfile.isLikelyOpenRouter(): Boolean = baseUrl.contains("openrouter", ignoreCase = true)
+
+/** 运行时视图：当日免费模型并入 OpenRouter provider 的可用列表（打开）。defaultModel 指向已到期模型时清空。 */
+fun AiProviderCatalog.mergedWithFreeModels(freeModels: List<String>): AiProviderCatalog {
+    if (freeModels.isEmpty()) return this
+    val next = providers.map { p ->
+        if (p.isLikelyOpenRouter()) p.copy(models = (p.models + freeModels).distinct().sorted()) else p
+    }
+    return copy(providers = next, defaultModel = defaultModel?.takeIf { s ->
+        next.any { it.id == s.providerId && s.modelId in it.models }
+    })
+}
+
+/** 持久化视图：剥离自动注入的免费模型，防免费池轮换后固化（关不上）。defaultModel 保留，load 时校验。 */
+fun AiProviderCatalog.strippedOfFreeModels(freeModels: List<String>): AiProviderCatalog {
+    if (freeModels.isEmpty()) return this
+    return copy(providers = providers.map { p ->
+        if (p.isLikelyOpenRouter()) p.copy(models = p.models.filterNot { it in freeModels }) else p
+    })
+}
