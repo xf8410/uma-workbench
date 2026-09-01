@@ -14,17 +14,38 @@ import kotlinx.serialization.json.Json
 
 /** The complete catalog is encrypted because every provider may contain multiple credentials. */
 class AiProviderCatalogStore(context: Context) {
+    private val ctx = context.applicationContext
     private val preferences = context.getSharedPreferences("ai-provider-catalog", Context.MODE_PRIVATE)
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
-    fun load(): AiProviderCatalog = decrypt(preferences.getString("catalog", null))
+    fun load(): AiProviderCatalog = mergeFreeModels(loadRaw())
+
+    /** 持久层原始数据（不含自动注入的免费模型）。 */
+    fun loadRaw(): AiProviderCatalog = decrypt(preferences.getString("catalog", null))
         .takeIf(String::isNotEmpty)
         ?.let { runCatching { json.decodeFromString<AiProviderCatalog>(it) }.getOrNull() }
         ?: AiProviderCatalog()
 
     fun save(catalog: AiProviderCatalog) {
         catalog.providers.forEach(AiProviderProfile::validate)
-        preferences.edit().putString("catalog", encrypt(json.encodeToString(catalog))).apply()
+        preferences.edit().putString("catalog", encrypt(json.encodeToString(stripFreeModels(catalog)))).apply()
+    }
+
+    // ── OpenRouter 每日免费模型注入 ──
+    // load() 时把当日免费模型并入 OpenRouter provider 的 models（打开），
+    // save() 时剥离，避免免费池轮换后旧免费模型被固化在持久层（关不上）。
+
+    private fun freeStore(context: Context): OpenRouterFreeModelStore? =
+        runCatching { OpenRouterFreeModelStore(context.applicationContext) }.getOrNull()
+
+    private fun mergeFreeModels(catalog: AiProviderCatalog): AiProviderCatalog {
+        val store = freeStore(ctx) ?: return catalog
+        return catalog.mergedWithFreeModels(store.load().freeModels)
+    }
+
+    private fun stripFreeModels(catalog: AiProviderCatalog): AiProviderCatalog {
+        val store = freeStore(ctx) ?: return catalog
+        return catalog.strippedOfFreeModels(store.load().freeModels)
     }
 
     fun clear() { preferences.edit().clear().apply() }
@@ -52,3 +73,5 @@ class AiProviderCatalogStore(context: Context) {
     }
     private companion object { const val ALIAS = "uma-workbench-ai-provider-catalog"; const val TRANSFORMATION = "AES/GCM/NoPadding"; const val IV_BYTES = 12 }
 }
+
+fun AiProviderProfile.isLikelyOpenRouter(): Boolean = baseUrl.contains("openrouter", ignoreCase = true)

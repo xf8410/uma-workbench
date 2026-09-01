@@ -88,6 +88,14 @@ class WorkbenchApplication : Application() {
         )
         sourceImporter = SourceImporter(contentResolver)
         workScheduler = WorkScheduler(this)
+        // OpenRouter 每日免费模型：注册每日周期任务 + 启动时若超过 12 小时未同步立即刷新
+        workScheduler.scheduleOpenRouterFreeModelsPeriodic()
+        runCatching {
+            val freeState = com.uma.workbench.agent.OpenRouterFreeModelStore(this).load()
+            if (freeState.autoManage && System.currentTimeMillis() - freeState.lastSyncAt > 12 * 3600_000L) {
+                workScheduler.scheduleOpenRouterFreeModelsNow()
+            }
+        }
         githubReadonlyAgentSource = AndroidGitHubReadonlyAgentToolDataSource(this)
         githubContributionAgentSource = AndroidGitHubContributionAgentToolDataSource(this, githubConfirmationStore)
         githubCloneAgentSource = AndroidGitHubCloneAgentToolDataSource(this, database) { ActiveWorkspaceBridge.workspaceId.value }
