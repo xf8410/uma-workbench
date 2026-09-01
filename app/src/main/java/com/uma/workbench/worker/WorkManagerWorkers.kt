@@ -18,6 +18,24 @@ import kotlinx.coroutines.ensureActive
 
 abstract class UmaWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params)
 
+/** 每日刷新 OpenRouter 免费模型池：新免费→自动并入，到期→自动移出。 */
+class OpenRouterFreeModelWorker(context: Context, params: WorkerParameters) : UmaWorker(context, params) {
+    override suspend fun doWork(): Result {
+        val refresher = com.uma.workbench.agent.OpenRouterFreeModelRefresher()
+        val store = com.uma.workbench.agent.OpenRouterFreeModelStore(applicationContext)
+        return try {
+            val result = refresher.refresh(applicationContext, store)
+            Result.success(workDataOf(
+                "freeCount" to result.freeModels.size,
+                "opened" to result.opened.size,
+                "closed" to result.closed.size
+            ))
+        } catch (e: Exception) {
+            if (runAttemptCount < 3) Result.retry() else Result.failure(workDataOf("error" to (e.message ?: "刷新失败")))
+        }
+    }
+}
+
 class AuditWorker(context: Context, params: WorkerParameters) : UmaWorker(context, params) {
     override suspend fun doWork(): Result {
         val id = inputData.getString("workItemId") ?: return Result.failure(workDataOf("error" to "缺少 workItemId"))
