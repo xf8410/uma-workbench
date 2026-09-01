@@ -2,6 +2,7 @@ package com.uma.workbench.agent
 
 import android.content.Context
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
 
 /**
  * OpenRouter 每日免费模型池。

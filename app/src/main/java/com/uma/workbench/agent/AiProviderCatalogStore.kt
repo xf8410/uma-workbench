@@ -73,5 +73,3 @@ class AiProviderCatalogStore(context: Context) {
     }
     private companion object { const val ALIAS = "uma-workbench-ai-provider-catalog"; const val TRANSFORMATION = "AES/GCM/NoPadding"; const val IV_BYTES = 12 }
 }
-
-fun AiProviderProfile.isLikelyOpenRouter(): Boolean = baseUrl.contains("openrouter", ignoreCase = true)
