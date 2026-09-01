@@ -23,7 +23,7 @@ class OpenRouterFreeModelsTest {
     """.trimIndent()
 
     @Test fun extractFreePicksZeroPricingAndFreeSuffix() {
-        val free = refresher.extractFree(json.parseToJsonElement(apiResponse))
+        val free = refresher.extractFreeModels(json.parseToJsonElement(apiResponse))
         assertEquals(
             listOf(
                 "deepseek/deepseek-r1:free",
@@ -36,7 +36,7 @@ class OpenRouterFreeModelsTest {
 
     @Test fun pricingOnlyOneSideZeroIsNotFree() {
         val oneSided = """{"data":[{"id":"x/y","pricing":{"prompt":"0","completion":"0.00001"}}]}"""
-        assertTrue(refresher.extractFree(json.parseToJsonElement(oneSided)).isEmpty())
+        assertTrue(refresher.extractFreeModels(json.parseToJsonElement(oneSided)).isEmpty())
     }
 
     private fun catalog(defaultModel: AiModelSelection? = null) = AiProviderCatalog(
