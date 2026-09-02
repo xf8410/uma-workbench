@@ -92,14 +92,14 @@ fun WorkbenchApp(
     lspVm: com.uma.workbench.lsp.LspViewModel = viewModel()
 ) {
     val appContext = androidx.compose.ui.platform.LocalContext.current
-    val pluginRepository = remember { com.uma.workbench.plugin.PluginRegistryRepository(com.uma.workbench.plugin.PluginRegistryDatabase.get(appContext).pluginDao()) }
+    val pluginRepository = remember { com.uma.workbench.plugin.PluginRegistryRepository(com.uma.workbench.plugin.PluginRegistryDatabase.get(appContext).plugins()) }
     val appVersionCode = remember { runCatching { appContext.packageManager.getPackageInfo(appContext.packageName, 0).versionCode }.getOrDefault(1) }
     val workspaces by vm.workspaces.collectAsStateWithLifecycle()
     val currentWs by vm.currentWorkspace.collectAsStateWithLifecycle()
     val networkState by vm.networkState.collectAsStateWithLifecycle()
     val hlpatchState by vm.hlpatchState.collectAsStateWithLifecycle()
     if (currentWs == null) WorkspacePicker(workspaces, vm)
-    else TraeLayout(vm, aiConfigVm, lanModelVm, localModelVm, aiChatVm, agentPartnerVm, auditVm, githubVm, currentWs!!, networkState, hlpatchState, knowledgeVm, lspVm, pluginRepository, appVersionCode)
+    else TraeLayout(vm, aiConfigVm, lanModelVm, localModelVm, aiChatVm, agentPartnerVm, auditVm, githubVm, knowledgeVm, lspVm, pluginRepository, appVersionCode, currentWs!!, networkState, hlpatchState)
 }
 
 @Composable
