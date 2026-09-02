@@ -34,6 +34,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.uma.workbench.agent.ActiveWorkspaceDocument
 import com.uma.workbench.agent.ActiveWorkspaceDocumentBridge
 import com.uma.workbench.agent.AgentPartnerViewModel
+import com.uma.workbench.knowledge.KnowledgePanel
+import com.uma.workbench.lsp.LspPanel
+import com.uma.workbench.ui.PluginPanel
 import com.uma.workbench.data.WorkspaceEntity
 import com.uma.workbench.hlpatch.HlpatchClient
 import com.uma.workbench.network.NetworkState
@@ -84,14 +87,19 @@ fun WorkbenchApp(
     agentPartnerVm: AgentPartnerViewModel = viewModel(),
     auditVm: DeterministicAuditViewModel = viewModel(),
     githubVm: GitHubViewModel = viewModel(),
-    localModelVm: LocalSmallModelViewModel = viewModel()
+    localModelVm: LocalSmallModelViewModel = viewModel(),
+    knowledgeVm: com.uma.workbench.knowledge.KnowledgeViewModel = viewModel(),
+    lspVm: com.uma.workbench.lsp.LspViewModel = viewModel()
 ) {
+    val appContext = androidx.compose.ui.platform.LocalContext.current
+    val pluginRepository = remember { com.uma.workbench.plugin.PluginRegistryRepository(com.uma.workbench.plugin.PluginRegistryDatabase.get(appContext).pluginDao()) }
+    val appVersionCode = remember { runCatching { appContext.packageManager.getPackageInfo(appContext.packageName, 0).versionCode }.getOrDefault(1) }
     val workspaces by vm.workspaces.collectAsStateWithLifecycle()
     val currentWs by vm.currentWorkspace.collectAsStateWithLifecycle()
     val networkState by vm.networkState.collectAsStateWithLifecycle()
     val hlpatchState by vm.hlpatchState.collectAsStateWithLifecycle()
     if (currentWs == null) WorkspacePicker(workspaces, vm)
-    else TraeLayout(vm, aiConfigVm, lanModelVm, localModelVm, aiChatVm, agentPartnerVm, auditVm, githubVm, currentWs!!, networkState, hlpatchState)
+    else TraeLayout(vm, aiConfigVm, lanModelVm, localModelVm, aiChatVm, agentPartnerVm, auditVm, githubVm, currentWs!!, networkState, hlpatchState, knowledgeVm, lspVm, pluginRepository, appVersionCode)
 }
 
 @Composable
@@ -147,6 +155,10 @@ private fun TraeLayout(
     agentPartnerVm: AgentPartnerViewModel,
     auditVm: DeterministicAuditViewModel,
     githubVm: GitHubViewModel,
+    knowledgeVm: com.uma.workbench.knowledge.KnowledgeViewModel,
+    lspVm: com.uma.workbench.lsp.LspViewModel,
+    pluginRepository: com.uma.workbench.plugin.PluginRegistryRepository,
+    appVersionCode: Int,
     ws: WorkspaceEntity,
     networkState: NetworkState,
     hlpatchState: HlpatchClient.ConnectionState
@@ -196,6 +208,9 @@ private fun TraeLayout(
                         6 -> AgentPartnerPanel(agentPartnerVm, ws.id) { activeBottomTab = 0 }
                         7 -> DeterministicAuditPanel(auditVm, ws.id)
                         8 -> GitHubEntryScreen(githubVm)
+                        9 -> KnowledgePanel(knowledgeVm, ws.id)
+                        10 -> LspPanel(lspVm, ws.id)
+                        11 -> PluginPanel(pluginRepository, appVersionCode)
                         else -> {
                             if (openTabs.isNotEmpty()) Row(Modifier.fillMaxWidth().height(32.dp).horizontalScroll(rememberScrollState())) {
                                 openTabs.forEach { tab ->
@@ -217,7 +232,7 @@ private fun TraeLayout(
             }
             // 底部标签栏同风格悬浮胶囊：28dp→44dp 加大触控面积，底部留白不贴手势条
             Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 10.dp).height(44.dp).clip(RoundedCornerShape(22.dp)).background(WorkbenchColors.bgSurface).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
-                listOf("代码", "历史", "协议", "导入索引", "AI 聊天", "AI 配置", "伙伴与群聊", "确定性审计", "GitHub").forEachIndexed { index, label ->
+                listOf("代码", "历史", "协议", "导入索引", "AI 聊天", "AI 配置", "伙伴与群聊", "确定性审计", "GitHub", "知识库", "LSP", "插件").forEachIndexed { index, label ->
                     Text(label, color = if (index == activeBottomTab) WorkbenchColors.accent else WorkbenchColors.textMuted, modifier = Modifier.clickable {
                         activeBottomTab = index
                         if (index == 4) aiChatVm.refreshConfiguration()
