@@ -60,6 +60,29 @@ class HlpatchClient(private val db: AppDatabase, private val baseUrl: String = "
     }
 
     suspend fun get(path: String): HlpatchResult = request("GET", path, null)
+
+    /** 画面映射帧：二进制拉取（BMP），不落快照表。返回 (字节, 响应头)。 */
+    suspend fun fetchBytes(path: String): Pair<ByteArray, Map<String, String>>? = withContext(Dispatchers.IO) {
+        try {
+            val conn = (java.net.URL(baseUrl + path).openConnection() as java.net.HttpURLConnection).apply {
+                requestMethod = "GET"; connectTimeout = 3_000; readTimeout = 10_000
+            }
+            val code = conn.responseCode
+            if (code !in 200..299) { conn.disconnect(); return@withContext null }
+            val bytes = conn.inputStream.use { it.readBytes() }
+            val headers = conn.headerFields.entries
+                .filter { it.key != null }
+                .flatMap { (k, v) -> v.map { k.lowercase() to it } }
+                .toMap()
+            conn.disconnect()
+            state = ConnectionState.READY
+            if (bytes.isEmpty()) null else bytes to headers
+        } catch (e: Exception) {
+            state = ConnectionState.DISCONNECTED
+            Log.w("HlpatchClient", "fetchBytes $path failed: ${e.message}")
+            null
+        }
+    }
     suspend fun post(path: String, body: String): HlpatchResult = request("POST", path, body)
     private suspend fun request(method: String, path: String, body: String?): HlpatchResult = withContext(Dispatchers.IO) {
         state = ConnectionState.CONNECTING

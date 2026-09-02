@@ -211,6 +211,7 @@ private fun TraeLayout(
                         9 -> KnowledgePanel(knowledgeVm, ws.id)
                         10 -> LspPanel(lspVm, ws.id)
                         11 -> PluginPanel(pluginRepository, appVersionCode)
+                        12 -> TrainingMirrorPanel(vm)
                         else -> {
                             if (openTabs.isNotEmpty()) Row(Modifier.fillMaxWidth().height(32.dp).horizontalScroll(rememberScrollState())) {
                                 openTabs.forEach { tab ->
@@ -232,7 +233,7 @@ private fun TraeLayout(
             }
             // 底部标签栏同风格悬浮胶囊：28dp→44dp 加大触控面积，底部留白不贴手势条
             Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 10.dp).height(44.dp).clip(RoundedCornerShape(22.dp)).background(WorkbenchColors.bgSurface).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
-                listOf("代码", "历史", "协议", "导入索引", "AI 聊天", "AI 配置", "伙伴与群聊", "确定性审计", "GitHub", "知识库", "LSP", "插件").forEachIndexed { index, label ->
+                listOf("代码", "历史", "协议", "导入索引", "AI 聊天", "AI 配置", "伙伴与群聊", "确定性审计", "GitHub", "知识库", "LSP", "插件", "训练映射").forEachIndexed { index, label ->
                     Text(label, color = if (index == activeBottomTab) WorkbenchColors.accent else WorkbenchColors.textMuted, modifier = Modifier.clickable {
                         activeBottomTab = index
                         if (index == 4) aiChatVm.refreshConfiguration()

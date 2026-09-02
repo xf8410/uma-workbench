@@ -124,6 +124,42 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         repository.addMessage(MessageEntity(UUID.randomUUID().toString(), convId, null, null, repository.nextMessageSequence(convId), "assistant", "已收到：$text\n\n（AI Provider 尚未接入，当前为占位回复）", createdAt = System.currentTimeMillis()))
     }
 
+    // ── 训练界面映射（画面帧 + 触点上报，hlpatch v3.28.0+）──
+    private val _mirrorFrame = MutableStateFlow<android.graphics.Bitmap?>(null)
+    val mirrorFrame: StateFlow<android.graphics.Bitmap?> = _mirrorFrame.asStateFlow()
+    private val _mirrorInfo = MutableStateFlow("未连接")
+    val mirrorInfo: StateFlow<String> = _mirrorInfo.asStateFlow()
+    private val _mirrorTouches = MutableStateFlow<List<String>>(emptyList())
+    val mirrorTouches: StateFlow<List<String>> = _mirrorTouches.asStateFlow()
+    val mirrorRunning = MutableStateFlow(false)
+
+    fun mirrorPollOnce() = viewModelScope.launch {
+        val r = hlpatchClient.fetchBytes("/api/frame")
+        if (r == null) { _mirrorInfo.value = "无帧（hlpatch 未装画面 hook 或游戏未在渲染）"; return@launch }
+        val (bytes, headers) = r
+        val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+        if (bmp == null) { _mirrorInfo.value = "帧解码失败（${bytes.size}B）"; return@launch }
+        _mirrorFrame.value = bmp
+        val seq = headers["x-frame-seq"] ?: "?"
+        val ts = headers["x-frame-ts"] ?: "?"
+        val w = headers["x-frame-w"] ?: "?"
+        val h = headers["x-frame-h"] ?: "?"
+        _mirrorInfo.value = "帧#$seq · ${w}x${h} · ${bytes.size / 1024}KB · ts=$ts"
+    }
+
+    fun mirrorStart() { if (mirrorRunning.value) return; mirrorRunning.value = true; viewModelScope.launch { while (mirrorRunning.value) { mirrorPollOnce(); kotlinx.coroutines.delay(200) } } }
+    fun mirrorStop() { mirrorRunning.value = false }
+    fun mirrorToggleCollect(enabled: Boolean) = viewModelScope.launch { hlpatchClient.get("/api/frame_toggle?enabled=${if (enabled) 1 else 0}") }
+
+    /** 归一化坐标 (0..1) 上报，B 阶段 hlpatch 注入游戏。 */
+    fun mirrorTouch(nx: Double, ny: Double) = viewModelScope.launch {
+        val body = "{\"x\":${"%.4f".format(nx)},\"y\":${"%.4f".format(ny)}}"
+        val r = hlpatchClient.post("/api/touch", body)
+        if (r.ok) {
+            _mirrorTouches.value = (listOf("${"%.3f".format(nx)},${"%.3f".format(ny)}${if (r.body.contains("a_logged_only")) "（已记录·注入未实装）" else ""}") + _mirrorTouches.value).take(8)
+        }
+    }
+
     fun connectHlpatch() = viewModelScope.launch { hlpatchState.value = HlpatchClient.ConnectionState.CONNECTING; hlpatchClient.health(); hlpatchState.value = hlpatchClient.state }
     fun discoverHlpatchCapabilities() = viewModelScope.launch { hlpatchCapabilities.value = HlpatchCapabilityReport(running = true); hlpatchCapabilities.value = hlpatchClient.discoverCapabilities(); hlpatchState.value = hlpatchClient.state }
 
