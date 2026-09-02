@@ -101,4 +101,5 @@ import kotlinx.coroutines.flow.Flow
     @Query("SELECT * FROM messages WHERE conversationId = :convId ORDER BY sequence DESC LIMIT :limit") suspend fun recentMessages(convId: String, limit: Int): List<MessageEntity>
     @Query("SELECT * FROM messages WHERE conversationId = :convId AND sequence < :beforeSequence ORDER BY sequence DESC LIMIT :limit") suspend fun messagesBefore(convId: String, beforeSequence: Long, limit: Int): List<MessageEntity>
     @Query("SELECT COUNT(*) FROM messages WHERE conversationId = :convId") suspend fun count(convId: String): Long
+    @Query("DELETE FROM messages WHERE id = :id") suspend fun deleteById(id: String): Int
 }

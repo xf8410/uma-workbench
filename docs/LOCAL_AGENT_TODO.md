@@ -72,3 +72,13 @@
 - [x] 顶栏改 Agora 风格悬浮胶囊：safeDrawing 之外再下沉 16dp，48dp 高圆角胶囊（bgSurface），工作区名超长省略号，状态徽标不再挤压
 - [x] 底部标签栏同风格胶囊化：28dp→44dp 触控面积，底部留白不贴手势条
 - [x] versionCode 6 / versionName 1.4.0
+
+## Agora 对齐：AI 聊天功能增强（2026-09-03）
+
+- [x] 顶栏会话累计 Token 统计（Agora「总计：X Tokens」同款）：文档名 · 总计 N Tokens
+- [x] 空会话欢迎语「欢迎使用 UMA Workbench.」+ 闪烁光标
+- [x] Agent 轮次卡片 Agora 化：🧠 思考标题 + 折叠/展开 + 工具行状态着色（✓ 完整 / ◐ 未完整 / ✗ 失败）+ 字符区间摘要
+- [x] 长按消息菜单新增：AI 回复「重新生成」（级联删除后完整重走 executeSend，等待 Room flow 刷新防重复）、用户消息「填入输入框」
+- [x] 输入区模型快捷切换 pill：当前模型名直接点选切换默认模型（含免费模型），无需跳配置页
+- [x] 输入框多行展开：trailing 箭头 1↔5 行切换
+- [x] versionCode 7 / versionName 1.5.0
