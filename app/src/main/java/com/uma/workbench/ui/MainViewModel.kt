@@ -155,7 +155,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** 归一化坐标 (0..1) 上报，B 阶段 hlpatch 注入游戏。 */
     fun mirrorTouch(nx: Double, ny: Double) = viewModelScope.launch {
-        val body = "{\"x\":${"%.4f".format(nx)},"y":${"%.4f".format(ny)}}"
+        val body = "{\"x\":${"%.4f".format(nx)},\"y\":${"%.4f".format(ny)}}"
         val r = hlpatchClient.post("/api/touch", body)
         if (r.ok) {
             _mirrorTouches.value = (listOf("${"%.3f".format(nx)},${"%.3f".format(ny)}${if (r.body.contains("a_logged_only")) "（已记录·注入未实装）" else ""}") + _mirrorTouches.value).take(8)
