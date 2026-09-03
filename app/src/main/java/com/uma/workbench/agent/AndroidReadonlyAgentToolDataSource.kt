@@ -9,6 +9,7 @@ import com.uma.workbench.data.RecentFileEntity
 import com.uma.workbench.hlpatch.HlpatchClient
 import com.uma.workbench.protocol.ProtocolHistoryPresentation
 import com.uma.workbench.protocol.ProtocolHistoryStore
+import java.security.MessageDigest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -65,6 +66,39 @@ class AndroidReadonlyAgentToolDataSource(
     override suspend fun searchSymbol(query: String, offset: Int) =
         renderSearch(search.search(allowedDocuments(), query, offset, true), "symbol-literal")
 
+    /**
+     * 本地写回（write_workspace_file）：整文件覆盖，UTF-8 ≤48000 字节。
+     * 安全边界：
+     * - uri 必须属于当前工作区（活动文件/最近文件/已导入来源），与读工具同一白名单，杜绝任意路径写；
+     * - file:// 只允许克隆目录内的真实文件路径；content:// 走 SAF openOutputStream，
+     *   导入时已申请 READ|WRITE 持久权限，只授予读的文件会收到明确的拒绝原因；
+     * - 模式门（仅 ACT）与逐次审批门在 ApprovableToolExecutor 层，先于本方法执行。
+     */
+    override suspend fun writeWorkspaceFile(uri: String, content: String): String {
+        require(content.isNotEmpty()) { "content 不能为空：清空文件请写入单个换行符" }
+        val bytes = content.toByteArray(Charsets.UTF_8)
+        require(bytes.size <= 48_000) { "content UTF-8 共 ${bytes.size} 字节，超过 48000 上限；请拆分文件或改用 GitHub 贡献流" }
+        val document = requireAllowedDocument(uri)
+        withContext(Dispatchers.IO) {
+            if (uri.startsWith("file://")) {
+                val path = Uri.parse(uri).path ?: error("非法 file URI：$uri")
+                val target = java.io.File(path)
+                require(target.parentFile?.exists() == true) { "目标目录不存在：${target.parent}" }
+                require(!target.isDirectory) { "目标是目录，不能覆盖写入：$path" }
+                target.writeBytes(bytes)
+            } else {
+                val stream = try {
+                    appContext.contentResolver.openOutputStream(Uri.parse(uri), "w")
+                } catch (security: SecurityException) {
+                    error("写入被拒绝：该文件只有读权限（SAF）。请在「导入并索引」重新导入或在代码页重新打开该文件以授予写权限。（${security.message}）")
+                } ?: error("无法打开输出流：$uri")
+                stream.use { it.write(bytes) }
+            }
+        }
+        val sha = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+        return "title=${document.title}\nuri=$uri\nwrittenBytes=${bytes.size}\nsha256=$sha\n写入成功：文件已整体替换为新内容。"
+    }
+
     override suspend fun readIl2CppClass(className: String): String {
         require(className.isNotBlank())
         val fields = hlpatch.il2cppFields(className)
@@ -102,7 +136,7 @@ class AndroidReadonlyAgentToolDataSource(
     }
 
     private suspend fun requireAllowedDocument(uri: String) = allowedDocuments().firstOrNull { it.uri == uri }
-        ?: error("拒绝读取不属于当前工作区的 URI：$uri")
+        ?: error("拒绝访问不属于当前工作区的 URI：$uri")
 
     private suspend fun readAllowedFile(uri: String): String {
         requireAllowedDocument(uri)
