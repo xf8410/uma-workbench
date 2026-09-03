@@ -21,18 +21,23 @@ class ReadonlyAgentToolSchemasTest {
         "github_contribute_write", "github_contribute_pr"
     )
 
+    /** 工作区本地写：仅主 Agent 可见，受 ACT 模式+逐次审批双重门控。 */
+    private val localWriteNames = setOf("write_workspace_file")
+
     @Test fun schemaNamesExactlyMatchReadonlyPolicy() {
         val names = names(ReadonlyAgentToolSchemas.openAiCompatible)
         assertEquals(ReadonlyAgentToolPolicy.allowedNames, names)
+        val permittedWrites = contributionNames + localWriteNames
         assertFalse(
-            "除贡献流外不得出现写/删/改类工具",
+            "除贡献流与工作区本地写外不得出现写/删/改类工具",
             names.any {
-                it !in contributionNames &&
+                it !in permittedWrites &&
                     (it.contains("write") || it.contains("delete") || it.contains("apply"))
             }
         )
         assertTrue("read_tool_result" in names)
         assertTrue("delegate_subagents" in names)
+        assertTrue("write_workspace_file" in names)
         assertTrue(names.containsAll(githubNames))
         assertTrue(names.containsAll(contributionNames))
     }
@@ -50,9 +55,11 @@ class ReadonlyAgentToolSchemasTest {
     @Test fun childSchemaExcludesDelegationAndGitHubQuotaTools() {
         val names = names(ReadonlyAgentToolSchemas.childReadOnly)
         assertFalse("delegate_subagents" in names)
+        // 子 Agent 不得拿到任何写工具：本地写同样只属于主 Agent
+        assertFalse("write_workspace_file" in names)
         val rootOnlyGithub = githubNames + contributionNames + setOf("github_clone_repository")
         assertTrue(names.intersect(rootOnlyGithub).isEmpty())
-        assertEquals(ReadonlyAgentToolPolicy.allowedNames - rootOnlyGithub - "delegate_subagents", names)
+        assertEquals(ReadonlyAgentToolPolicy.allowedNames - rootOnlyGithub - "delegate_subagents" - "write_workspace_file", names)
     }
 
     @Test fun githubSchemasHaveClosedObjectsAndExpectedRequiredFields() {
@@ -79,6 +86,16 @@ class ReadonlyAgentToolSchemasTest {
                 .getValue("properties").jsonObject.getValue("page").jsonObject
             assertEquals("1", page.getValue("minimum").jsonPrimitive.content)
         }
+    }
+
+    @Test fun workspaceWriteToolRequiresUriAndContent() {
+        val tool = ReadonlyAgentToolSchemas.openAiCompatible.first {
+            it.jsonObject.getValue("function").jsonObject.getValue("name").jsonPrimitive.content == "write_workspace_file"
+        }
+        val parameters = tool.jsonObject.getValue("function").jsonObject.getValue("parameters").jsonObject
+        val required = parameters.getValue("required").jsonArray.map { it.jsonPrimitive.content }.toSet()
+        assertEquals(setOf("uri", "content"), required)
+        assertEquals("false", parameters.getValue("additionalProperties").jsonPrimitive.content)
     }
 
     @Test fun defaultRequestIncludesToolsOnlyWhenExplicitlyEnabled() {
