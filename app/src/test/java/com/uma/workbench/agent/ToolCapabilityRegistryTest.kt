@@ -48,6 +48,17 @@ class ToolCapabilityRegistryTest {
     }
 
     @Test
+    fun defaultRegistry_workspaceWriteIsLocalWriteRequiringApproval() {
+        val registry = ToolCapabilityRegistry.default()
+        val cap = registry.get("write_workspace_file")
+        assertNotNull("write_workspace_file 应在注册表中", cap)
+        assertEquals(ToolRiskLevel.LOCAL_WRITE, cap!!.riskLevel)
+        assertTrue("本地写必须逐次审批", cap.requiresApproval)
+        // 模式矩阵：只有 ACT 允许 LOCAL_WRITE，其余模式直接拒绝
+        assertEquals(setOf(AgentMode.ACT), AgentMode.modesAllowing(ToolRiskLevel.LOCAL_WRITE))
+    }
+
+    @Test
     fun defaultRegistry_githubReadOnlyToolsDoNotRequireApproval() {
         val registry = ToolCapabilityRegistry.default()
         val readOnlyTools = listOf(
