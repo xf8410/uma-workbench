@@ -25,6 +25,12 @@ class InMemoryAgentToolResultStore:AgentToolResultStore{
 
 interface ReadonlyAgentToolDataSource{
  suspend fun listWorkspaceFiles():String;suspend fun readCurrentFile():String;suspend fun readFile(uri:String):String;suspend fun readFileRange(uri:String,startLine:Int,endLine:Int):String;suspend fun searchWorkspace(query:String,offset:Int,caseSensitive:Boolean):String;suspend fun searchSymbol(query:String,offset:Int):String;suspend fun readIl2CppClass(className:String):String;suspend fun readProtocolRecord(id:String):String;suspend fun readSoSnapshot(endpoint:String?):String;suspend fun readDoc(id:String):String
+ /**
+  * 本地写回工作区文件（write_workspace_file 工具的数据源）。
+  * 默认实现直接拒绝：只有显式支持写入的数据源（Android 生产实现/测试替身）才覆写，
+  * 既有只读替身无需改动即可编译；模式+审批门在 ApprovableToolExecutor 层，不在此处。
+  */
+ suspend fun writeWorkspaceFile(uri:String,content:String):String=error("当前工作区数据源不支持写入")
 }
 
 class ReadonlyAgentToolExecutor(
@@ -58,6 +64,7 @@ class ReadonlyAgentToolExecutor(
   "read_protocol_record"->source.readProtocolRecord(args.requiredString("id"))
   "read_so_snapshot"->source.readSoSnapshot(args.optionalString("endpoint"))
   "read_doc"->source.readDoc(args.requiredString("id"))
+  "write_workspace_file"->source.writeWorkspaceFile(args.requiredString("uri"),args.requiredString("content"))
   "github_list_repositories"->github().listRepositories(args.optionalPositiveInt("page")?:1)
   "github_get_repository"->github().getRepository(args.requiredString("owner"),args.requiredString("name"))
   "github_list_branches"->github().listBranches(args.requiredString("owner"),args.requiredString("name"))
