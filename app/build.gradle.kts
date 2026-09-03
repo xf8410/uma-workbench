@@ -14,8 +14,8 @@ android {
         applicationId = "com.uma.workbench"
         minSdk = 26
         targetSdk = 36
-        versionCode = 7
-        versionName = "1.5.0"
+        versionCode = 8
+        versionName = "1.5.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
