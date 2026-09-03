@@ -19,6 +19,7 @@ class ReadonlyAgentToolExecutorTest {
         override suspend fun readProtocolRecord(id: String) = "protocol:$id"
         override suspend fun readSoSnapshot(endpoint: String?) = "so:${endpoint ?: "/summary"}"
         override suspend fun readDoc(id: String) = "doc:$id"
+        override suspend fun writeWorkspaceFile(uri: String, content: String) = "written:$uri:${content.length}"
     }
 
     @Test fun readsCurrentFileWithPaging() = runBlocking {
@@ -63,6 +64,23 @@ class ReadonlyAgentToolExecutorTest {
     @Test fun rejectsMutatingUnknownToolAsVisibleFailure() = runBlocking {
         val outcome = ReadonlyAgentToolExecutor(source()).execute(AiToolCall(0, "bad", "write_file", "{}"))
         assertTrue((outcome as AgentToolOutcome.Failure).failure.completeError.contains("不允许执行工具 write_file"))
+    }
+
+    @Test fun writesWorkspaceFileThroughDataSource() = runBlocking {
+        val outcome = ReadonlyAgentToolExecutor(source()).execute(
+            AiToolCall(0, "w", "write_workspace_file", """{"uri":"content://doc/a.kt","content":"hello"}""")
+        )
+        val result = (outcome as AgentToolOutcome.Success).result
+        assertEquals("write_workspace_file", result.toolName)
+        assertTrue(result.content.startsWith("written:content://doc/a.kt:5"))
+    }
+
+    @Test fun writeWorkspaceFileMissingArgsFailsAsVisibleFailure() = runBlocking {
+        val outcome = ReadonlyAgentToolExecutor(source()).execute(
+            AiToolCall(0, "w", "write_workspace_file", """{"uri":"content://doc/a.kt"}""")
+        )
+        assertTrue(outcome is AgentToolOutcome.Failure)
+        assertTrue((outcome as AgentToolOutcome.Failure).failure.completeError.contains("content"))
     }
 
     @Test(expected = IllegalArgumentException::class)
