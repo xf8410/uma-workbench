@@ -63,6 +63,9 @@ class ToolCapabilityRegistry {
             register(ToolCapability("read_tool_result", "续读工具结果分页", ToolRiskLevel.READ_ONLY))
             register(ToolCapability("delegate_subagents", "分派子 Agent", ToolRiskLevel.READ_ONLY))
 
+            // Workspace local write: ACT 模式 + 逐次审批（回答「怎么让 AI 改工作区」的落盘通道）
+            register(ToolCapability("write_workspace_file", "写回工作区文件（整文件覆盖）", ToolRiskLevel.LOCAL_WRITE))
+
             // GitHub read-only tools
             register(ToolCapability("github_list_repositories", "GitHub 仓库列表", ToolRiskLevel.READ_ONLY))
             register(ToolCapability("github_get_repository", "GitHub 仓库元数据", ToolRiskLevel.READ_ONLY))
