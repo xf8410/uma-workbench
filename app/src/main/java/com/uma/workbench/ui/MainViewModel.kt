@@ -96,7 +96,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val failures = mutableListOf<String>()
         uris.forEach { uri ->
             runCatching {
-                runCatching { app.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+                // 同时申请读+写持久权限：AI 的 write_workspace_file 需要 SAF 写权限才能落盘；
+                // 只读提供者（如部分云盘）会抛异常，runCatching 吞掉后导入照常，仅失去写能力
+                runCatching { app.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) }
                 val imported = withContext(Dispatchers.IO) { app.sourceImporter.importSource(uri) }
                 val result = repository.queueImportedSource(imported.name, uri.toString(), imported.kind, imported.sha256, workspaceId, imported.size)
                 app.workScheduler.scheduleAudit(result.workItemId)
@@ -153,7 +155,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** 归一化坐标 (0..1) 上报，B 阶段 hlpatch 注入游戏。 */
     fun mirrorTouch(nx: Double, ny: Double) = viewModelScope.launch {
-        val body = "{\"x\":${"%.4f".format(nx)},\"y\":${"%.4f".format(ny)}}"
+        val body = "{\"x\":${"%.4f".format(nx)},"y":${"%.4f".format(ny)}}"
         val r = hlpatchClient.post("/api/touch", body)
         if (r.ok) {
             _mirrorTouches.value = (listOf("${"%.3f".format(nx)},${"%.3f".format(ny)}${if (r.body.contains("a_logged_only")) "（已记录·注入未实装）" else ""}") + _mirrorTouches.value).take(8)
