@@ -11,6 +11,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -21,9 +23,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -164,6 +168,10 @@ private fun TraeLayout(
     hlpatchState: HlpatchClient.ConnectionState
 ) {
     var activeBottomTab by remember { mutableIntStateOf(0) }
+    // 左栏宽度可拖拽调节（2026-09-03 用户反馈：中间竖线应能拉伸两边的框，否则对话时看不到）：
+    // 默认 220dp，范围 120..420dp，双击分隔条复位；rememberSaveable 旋转/重建后保留
+    var sidebarWidth by rememberSaveable { mutableStateOf(220f) }
+    var dividerDragging by remember { mutableStateOf(false) }
     val projects by vm.projects.collectAsStateWithLifecycle()
     val recentFiles by vm.recentFiles.collectAsStateWithLifecycle()
     val openTabs by vm.openTabs.collectAsStateWithLifecycle()
@@ -188,7 +196,7 @@ private fun TraeLayout(
                 Text("hlpatch:${hlpatchState.name} · ${networkState.name}", color = WorkbenchColors.textMuted, style = MaterialTheme.typography.labelSmall, maxLines = 1)
             }
             Row(Modifier.weight(1f)) {
-                Column(Modifier.width(220.dp).fillMaxHeight().background(WorkbenchColors.bgSecondary).padding(8.dp)) {
+                Column(Modifier.width(sidebarWidth.dp).fillMaxHeight().background(WorkbenchColors.bgSecondary).padding(8.dp)) {
                     Text("项目", color = WorkbenchColors.textSecondary)
                     projects.forEach { Text(it.name, color = WorkbenchColors.textPrimary, modifier = Modifier.padding(4.dp)) }
                     Text("最近文件", color = WorkbenchColors.textSecondary, modifier = Modifier.padding(top = 8.dp))
@@ -201,7 +209,33 @@ private fun TraeLayout(
                         Text("导入并索引")
                     }
                 }
-                Column(Modifier.weight(1f)) {
+                // 可拖动分隔条：14dp 宽触控区（手指好按），中间 2dp 视觉线；拖动实时改左栏宽度，双击复位 220dp
+                Box(
+                    Modifier
+                        .fillMaxHeight()
+                        .width(14.dp)
+                        .pointerInput(Unit) {
+                            detectHorizontalDragGestures(
+                                onDragStart = { dividerDragging = true },
+                                onDragEnd = { dividerDragging = false },
+                                onDragCancel = { dividerDragging = false }
+                            ) { _, dragAmount ->
+                                sidebarWidth = (sidebarWidth + dragAmount.toDp().value).coerceIn(120f, 420f)
+                            }
+                        }
+                        .pointerInput(Unit) {
+                            detectTapGestures(onDoubleTap = { sidebarWidth = 220f })
+                        }
+                ) {
+                    Box(
+                        Modifier
+                            .align(Alignment.Center)
+                            .fillMaxHeight()
+                            .width(if (dividerDragging) 3.dp else 2.dp)
+                            .background(if (dividerDragging) WorkbenchColors.accent else WorkbenchColors.bgSecondary)
+                    )
+                }
+                Column(Modifier.weight(1f).fillMaxHeight()) {
                     when (activeBottomTab) {
                         4 -> AiChatScreen(aiChatVm) { activeBottomTab = 5 }
                         5 -> AiConfigurationScreen(aiConfigVm, lanModelVm, localModelVm)
