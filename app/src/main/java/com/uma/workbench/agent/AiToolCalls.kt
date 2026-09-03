@@ -15,6 +15,7 @@ object ReadonlyAgentToolPolicy {
         "list_workspace_files", "read_current_file", "read_file", "read_file_range",
         "search_workspace", "search_symbol", "read_il2cpp_class", "read_protocol_record",
         "read_so_snapshot", "read_doc", "read_tool_result", "delegate_subagents",
+        "write_workspace_file",
         "github_list_repositories", "github_get_repository", "github_list_branches",
         "github_read_file", "github_list_commits", "github_get_workflow_runs",
         "github_contribute_fork", "github_contribute_branch",
@@ -50,7 +51,7 @@ object AiToolCallNormalizer {
             when {
                 previous == null -> byId[call.id] = call
                 semanticFingerprint(previous) == semanticFingerprint(call) -> Unit
-                else -> error("工具调用 id ${call.id} 对应了不同的工具或参数")
+                else -> error("工具调用 ${call.id} 对应了不同的工具或参数")
             }
         }
         return byId.values.toList()
