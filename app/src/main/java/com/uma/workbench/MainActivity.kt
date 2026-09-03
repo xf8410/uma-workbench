@@ -9,6 +9,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -19,6 +21,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -27,12 +30,16 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.uma.workbench.agent.ActiveWorkspaceDocument
@@ -49,6 +56,7 @@ import com.uma.workbench.protocol.ProtocolEditorDefaultsFactory
 import com.uma.workbench.ui.*
 import com.uma.workbench.ui.theme.WorkbenchColors
 import com.uma.workbench.ui.theme.WorkbenchTheme
+import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
 
@@ -149,6 +157,13 @@ private fun WorkspacePicker(workspaces: List<WorkspaceEntity>, vm: MainViewModel
     }
 }
 
+/** 功能页签：emoji 图标 + 名称，顺序即索引（与 when 分支一一对应）。 */
+private val WorkbenchTabs = listOf(
+    "📄" to "代码", "🕘" to "历史", "📡" to "协议", "📥" to "导入索引",
+    "💬" to "AI 聊天", "⚙️" to "AI 配置", "👥" to "伙伴与群聊", "🔍" to "确定性审计",
+    "🐙" to "GitHub", "📚" to "知识库", "🔤" to "LSP", "🧩" to "插件", "🎮" to "训练映射"
+)
+
 @Composable
 private fun TraeLayout(
     vm: MainViewModel,
@@ -167,11 +182,17 @@ private fun TraeLayout(
     networkState: NetworkState,
     hlpatchState: HlpatchClient.ConnectionState
 ) {
-    var activeBottomTab by remember { mutableIntStateOf(0) }
-    // 左栏宽度可拖拽调节（2026-09-03 用户反馈：中间竖线应能拉伸两边的框，否则对话时看不到）：
-    // 默认 220dp，范围 120..420dp，双击分隔条复位；rememberSaveable 旋转/重建后保留
-    var sidebarWidth by rememberSaveable { mutableStateOf(220f) }
-    var dividerDragging by remember { mutableStateOf(false) }
+    // 2026-09-03 用户反馈：功能栏别压底部，改左侧边栏；选中页签后自动收起，手指从左边划出可再显示。
+    // 实现：覆盖式抽屉（不占内容宽度，天然解决上一版 220dp 固定栏挤压对话区的问题）——
+    //  ☰ 按钮 / 屏幕左缘 32dp 内向右划 / 左缘握把条 三种方式打开；
+    //  点页签或点遮罩关闭；面板上向左划也可关闭。
+    var activeTab by rememberSaveable { mutableIntStateOf(0) }
+    var drawerOpen by remember { mutableStateOf(false) }
+    val density = LocalDensity.current
+    val drawerWidth = 252.dp
+    val drawerWidthPx = with(density) { drawerWidth.toPx() }
+    val edgeThresholdPx = with(density) { 32.dp.toPx() }
+    val slide by animateFloatAsState(targetValue = if (drawerOpen) 1f else 0f, animationSpec = tween(220), label = "drawerSlide")
     val projects by vm.projects.collectAsStateWithLifecycle()
     val recentFiles by vm.recentFiles.collectAsStateWithLifecycle()
     val openTabs by vm.openTabs.collectAsStateWithLifecycle()
@@ -186,60 +207,61 @@ private fun TraeLayout(
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNotEmpty()) vm.importAndIndex(uris)
     }
-    Surface(Modifier.fillMaxSize(), color = WorkbenchColors.bg) {
+    Surface(
+        Modifier.fillMaxSize().pointerInput(drawerOpen) {
+            // 左缘向右划 = 打开抽屉；仅当起点贴左缘且横向位移足够时触发，
+            // 其余横向手势留给子级（hex 横滚/标签横滚）优先消费
+            var startX = 0f
+            var accumulated = 0f
+            detectHorizontalDragGestures(
+                onDragStart = { offset -> startX = offset.x; accumulated = 0f },
+                onDragEnd = {
+                    if (!drawerOpen && startX < edgeThresholdPx && accumulated > edgeThresholdPx) drawerOpen = true
+                },
+                onDragCancel = { }
+            ) { _, dragAmount -> accumulated += dragAmount }
+        },
+        color = WorkbenchColors.bg
+    ) {
         Column {
-            // Agora 风格悬浮胶囊顶栏（2026-09-02 用户反馈：顶栏太贴屏幕顶部、最上面的文字有时看不到）：
-            // safeDrawing 已避开状态栏/刘海，这里再额外下沉 16dp 留白 + 圆角胶囊造型，顶部内容明显下降、清晰可读
+            // Agora 风格悬浮胶囊顶栏：safeDrawing 已避开状态栏/刘海，额外下沉 16dp 留白
             Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 16.dp, bottom = 8.dp).height(48.dp).clip(RoundedCornerShape(24.dp)).background(WorkbenchColors.bgSurface).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton({ drawerOpen = !drawerOpen }, Modifier.size(32.dp)) { Icon(Icons.Default.Menu, "功能栏", tint = WorkbenchColors.textSecondary) }
                 IconButton({ vm.closeWorkspace() }, Modifier.size(32.dp)) { Icon(Icons.Default.Home, null, tint = WorkbenchColors.textSecondary) }
                 Text(ws.name, color = WorkbenchColors.textPrimary, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(horizontal = 4.dp))
                 Text("hlpatch:${hlpatchState.name} · ${networkState.name}", color = WorkbenchColors.textMuted, style = MaterialTheme.typography.labelSmall, maxLines = 1)
             }
-            Row(Modifier.weight(1f)) {
-                Column(Modifier.width(sidebarWidth.dp).fillMaxHeight().background(WorkbenchColors.bgSecondary).padding(8.dp)) {
-                    Text("项目", color = WorkbenchColors.textSecondary)
-                    projects.forEach { Text(it.name, color = WorkbenchColors.textPrimary, modifier = Modifier.padding(4.dp)) }
-                    Text("最近文件", color = WorkbenchColors.textSecondary, modifier = Modifier.padding(top = 8.dp))
-                    recentFiles.forEach { file ->
-                        Text(file.name, color = WorkbenchColors.textPrimary, modifier = Modifier.clickable { vm.openFile(file.uri, file.name) }.padding(4.dp))
-                    }
-                    Spacer(Modifier.weight(1f))
-                    TextButton(onClick = { importLauncher.launch(arrayOf("application/vnd.android.package-archive", "application/zip", "application/x-tar", "application/octet-stream", "application/json", "text/plain", "*/*")) }) {
-                        Icon(Icons.Default.FileOpen, null)
-                        Text("导入并索引")
-                    }
-                }
-                // 可拖动分隔条：14dp 宽触控区（手指好按），中间 2dp 视觉线；拖动实时改左栏宽度，双击复位 220dp
-                Box(
-                    Modifier
-                        .fillMaxHeight()
-                        .width(14.dp)
-                        .pointerInput(Unit) {
-                            detectHorizontalDragGestures(
-                                onDragStart = { dividerDragging = true },
-                                onDragEnd = { dividerDragging = false },
-                                onDragCancel = { dividerDragging = false }
-                            ) { _, dragAmount ->
-                                sidebarWidth = (sidebarWidth + dragAmount.toDp().value).coerceIn(120f, 420f)
-                            }
-                        }
-                        .pointerInput(Unit) {
-                            detectTapGestures(onDoubleTap = { sidebarWidth = 220f })
-                        }
-                ) {
+            Row(Modifier.weight(1f).fillMaxWidth()) {
+                // 收起状态下的左缘握把：一条细竖带 + 居中圆点，点按或向右拖都打开
+                if (slide < 0.02f) {
                     Box(
                         Modifier
-                            .align(Alignment.Center)
                             .fillMaxHeight()
-                            .width(if (dividerDragging) 3.dp else 2.dp)
-                            .background(if (dividerDragging) WorkbenchColors.accent else WorkbenchColors.bgSecondary)
-                    )
+                            .width(12.dp)
+                            .pointerInput(Unit) {
+                                var accumulated = 0f
+                                detectHorizontalDragGestures(
+                                    onDragStart = { accumulated = 0f },
+                                    onDragEnd = { if (accumulated > 24.dp.toPx()) drawerOpen = true }
+                                ) { _, dragAmount -> accumulated += dragAmount }
+                            }
+                            .pointerInput(Unit) { detectTapGestures { drawerOpen = true } }
+                    ) {
+                        Box(
+                            Modifier
+                                .align(Alignment.CenterVertically)
+                                .padding(start = 3.dp)
+                                .size(6.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(WorkbenchColors.bgSecondary)
+                        )
+                    }
                 }
                 Column(Modifier.weight(1f).fillMaxHeight()) {
-                    when (activeBottomTab) {
-                        4 -> AiChatScreen(aiChatVm) { activeBottomTab = 5 }
+                    when (activeTab) {
+                        4 -> AiChatScreen(aiChatVm) { activeTab = 5 }
                         5 -> AiConfigurationScreen(aiConfigVm, lanModelVm, localModelVm)
-                        6 -> AgentPartnerPanel(agentPartnerVm, ws.id) { activeBottomTab = 0 }
+                        6 -> AgentPartnerPanel(agentPartnerVm, ws.id) { activeTab = 0 }
                         7 -> DeterministicAuditPanel(auditVm, ws.id)
                         8 -> GitHubEntryScreen(githubVm)
                         9 -> KnowledgePanel(knowledgeVm, ws.id)
@@ -253,7 +275,7 @@ private fun TraeLayout(
                                 }
                             }
                             Box(Modifier.weight(1f).fillMaxWidth()) { ActiveDocumentPane(openTabs, activeTabId) }
-                            when (activeBottomTab) {
+                            when (activeTab) {
                                 1 -> ProtocolHistoryPanel(vm)
                                 2 -> ProtocolPanel(vm)
                                 3 -> Column(Modifier.height(430.dp)) {
@@ -265,13 +287,71 @@ private fun TraeLayout(
                     }
                 }
             }
-            // 底部标签栏同风格悬浮胶囊：28dp→44dp 加大触控面积，底部留白不贴手势条
-            Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 10.dp).height(44.dp).clip(RoundedCornerShape(22.dp)).background(WorkbenchColors.bgSurface).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
-                listOf("代码", "历史", "协议", "导入索引", "AI 聊天", "AI 配置", "伙伴与群聊", "确定性审计", "GitHub", "知识库", "LSP", "插件", "训练映射").forEachIndexed { index, label ->
-                    Text(label, color = if (index == activeBottomTab) WorkbenchColors.accent else WorkbenchColors.textMuted, modifier = Modifier.clickable {
-                        activeBottomTab = index
-                        if (index == 4) aiChatVm.refreshConfiguration()
-                    }.padding(horizontal = 12.dp))
+        }
+        // 抽屉遮罩：半透明变暗 + 点按关闭（slide>0 才参与组合，关闭动画结束后彻底消失）
+        if (slide > 0f) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.45f * slide))
+                    .pointerInput(Unit) { detectTapGestures { drawerOpen = false } }
+            )
+            // 抽屉面板：功能页签 + 项目/最近文件/导入并索引；选中页签即切换并收起
+            Column(
+                Modifier
+                    .fillMaxHeight()
+                    .width(drawerWidth)
+                    .offset { IntOffset(((slide - 1f) * drawerWidthPx).roundToInt(), 0) }
+                    .background(WorkbenchColors.bgSecondary)
+                    .pointerInput(Unit) {
+                        var accumulated = 0f
+                        detectHorizontalDragGestures(
+                            onDragStart = { accumulated = 0f },
+                            onDragEnd = { if (accumulated < -32.dp.toPx()) drawerOpen = false }
+                        ) { _, dragAmount -> accumulated += dragAmount }
+                    }
+                    .verticalScroll(rememberScrollState())
+                    .padding(vertical = 12.dp)
+            ) {
+                Text("功能", color = WorkbenchColors.textMuted, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 16.dp, bottom = 6.dp))
+                WorkbenchTabs.forEachIndexed { index, (icon, label) ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (index == activeTab) WorkbenchColors.bgSurface else Color.Transparent)
+                            .clickable {
+                                activeTab = index
+                                drawerOpen = false
+                                if (index == 4) aiChatVm.refreshConfiguration()
+                            }
+                            .padding(horizontal = 10.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(icon, fontSize = 16.sp)
+                        Text(label, color = if (index == activeTab) WorkbenchColors.accent else WorkbenchColors.textPrimary, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 10.dp))
+                    }
+                }
+                HorizontalDivider(Modifier.padding(vertical = 10.dp))
+                Text("项目", color = WorkbenchColors.textSecondary, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 16.dp))
+                projects.forEach { Text(it.name, color = WorkbenchColors.textPrimary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
+                Text("最近文件", color = WorkbenchColors.textSecondary, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 16.dp, top = 8.dp))
+                recentFiles.forEach { file ->
+                    Text(
+                        file.name,
+                        color = WorkbenchColors.textPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth().clickable { vm.openFile(file.uri, file.name); drawerOpen = false }.padding(horizontal = 16.dp, vertical = 6.dp)
+                    )
+                }
+                TextButton(
+                    onClick = { importLauncher.launch(arrayOf("application/vnd.android.package-archive", "application/zip", "application/x-tar", "application/octet-stream", "application/json", "text/plain", "*/*")) },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Icon(Icons.Default.FileOpen, null, Modifier.size(16.dp))
+                    Text("导入并索引", modifier = Modifier.padding(start = 6.dp))
                 }
             }
         }
