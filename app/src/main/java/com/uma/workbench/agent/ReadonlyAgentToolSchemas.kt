@@ -20,6 +20,7 @@ object ReadonlyAgentToolSchemas {
     /** GitHub tools are initially visible only to the root Agent. */
     val openAiCompatible: JsonArray = buildJsonArray {
         addWorkspaceReadOnlyTools()
+        addWorkspaceWriteTools()
         addGitHubReadOnlyTools()
         addGitHubContributionTools()
         addGitHubCloneTools()
@@ -68,6 +69,20 @@ object ReadonlyAgentToolSchemas {
         function("read_so_snapshot", "读取本地 hlpatch GET 相对端点；不限制合法动态端点、查询参数或嵌套类名", strings = listOf("endpoint"))
         function("read_doc", "按 ID 读取当前工作区 Doc", strings = listOf("id"), required = listOf("id"))
         function("read_tool_result", "按 resultId、offset、limit 精确续读先前工具的完整本地结果，直到 complete=true", strings = listOf("resultId"), integers = listOf("offset", "limit"), required = listOf("resultId", "offset"))
+    }
+
+    /**
+     * 工作区本地写工具：仅主 Agent 可见，子 Agent 拿不到（childReadOnly/childInvestigation 不含）。
+     * 双重门控：AgentMode.ACT 才允许 LOCAL_WRITE，且每次执行都过 ToolApprovalGate 用户审批。
+     * uri 必须属于当前工作区（活动文件/最近文件/已导入来源），克隆仓库文件写 file:// URI。
+     */
+    private fun JsonArrayBuilder.addWorkspaceWriteTools() {
+        function(
+            "write_workspace_file",
+            "把完整新内容写回当前工作区中已授权的文件：uri 必须来自 list_workspace_files/read_file 返回的工作区文件；content 是整个文件的新内容（UTF-8 不超过 48000 字节，超限会被拒绝）；仅「执行」模式可用且每次都需要用户在审批弹窗确认。改法：先 read_file 读全文，在原文基础上修改后整体写回",
+            strings = listOf("uri", "content"),
+            required = listOf("uri", "content")
+        )
     }
 
     private fun JsonArrayBuilder.addGitHubReadOnlyTools() {
