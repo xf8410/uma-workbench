@@ -223,135 +223,138 @@ private fun TraeLayout(
         },
         color = WorkbenchColors.bg
     ) {
-        Column {
-            // Agora 风格悬浮胶囊顶栏：safeDrawing 已避开状态栏/刘海，额外下沉 16dp 留白
-            Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 16.dp, bottom = 8.dp).height(48.dp).clip(RoundedCornerShape(24.dp)).background(WorkbenchColors.bgSurface).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton({ drawerOpen = !drawerOpen }, Modifier.size(32.dp)) { Icon(Icons.Default.Menu, "功能栏", tint = WorkbenchColors.textSecondary) }
-                IconButton({ vm.closeWorkspace() }, Modifier.size(32.dp)) { Icon(Icons.Default.Home, null, tint = WorkbenchColors.textSecondary) }
-                Text(ws.name, color = WorkbenchColors.textPrimary, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(horizontal = 4.dp))
-                Text("hlpatch:${hlpatchState.name} · ${networkState.name}", color = WorkbenchColors.textMuted, style = MaterialTheme.typography.labelSmall, maxLines = 1)
-            }
-            Row(Modifier.weight(1f).fillMaxWidth()) {
-                // 收起状态下的左缘握把：一条细竖带 + 居中圆点，点按或向右拖都打开
-                if (slide < 0.02f) {
-                    Box(
-                        Modifier
-                            .fillMaxHeight()
-                            .width(12.dp)
-                            .pointerInput(Unit) {
-                                var accumulated = 0f
-                                detectHorizontalDragGestures(
-                                    onDragStart = { accumulated = 0f },
-                                    onDragEnd = { if (accumulated > 24.dp.toPx()) drawerOpen = true }
-                                ) { _, dragAmount -> accumulated += dragAmount }
-                            }
-                            .pointerInput(Unit) { detectTapGestures { drawerOpen = true } }
-                    ) {
+        // Surface 内容是 ColumnScope——遮罩/面板必须放进 Box 才能覆盖内容而不是排在下方
+        Box(Modifier.fillMaxSize()) {
+            Column {
+                // Agora 风格悬浮胶囊顶栏：safeDrawing 已避开状态栏/刘海，额外下沉 16dp 留白
+                Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 16.dp, bottom = 8.dp).height(48.dp).clip(RoundedCornerShape(24.dp)).background(WorkbenchColors.bgSurface).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton({ drawerOpen = !drawerOpen }, Modifier.size(32.dp)) { Icon(Icons.Default.Menu, "功能栏", tint = WorkbenchColors.textSecondary) }
+                    IconButton({ vm.closeWorkspace() }, Modifier.size(32.dp)) { Icon(Icons.Default.Home, null, tint = WorkbenchColors.textSecondary) }
+                    Text(ws.name, color = WorkbenchColors.textPrimary, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(horizontal = 4.dp))
+                    Text("hlpatch:${hlpatchState.name} · ${networkState.name}", color = WorkbenchColors.textMuted, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                }
+                Row(Modifier.weight(1f).fillMaxWidth()) {
+                    // 收起状态下的左缘握把：一条细竖带 + 居中圆点，点按或向右拖都打开
+                    if (slide < 0.02f) {
                         Box(
                             Modifier
-                                .align(Alignment.CenterVertically)
-                                .padding(start = 3.dp)
-                                .size(6.dp)
-                                .clip(RoundedCornerShape(3.dp))
-                                .background(WorkbenchColors.bgSecondary)
-                        )
-                    }
-                }
-                Column(Modifier.weight(1f).fillMaxHeight()) {
-                    when (activeTab) {
-                        4 -> AiChatScreen(aiChatVm) { activeTab = 5 }
-                        5 -> AiConfigurationScreen(aiConfigVm, lanModelVm, localModelVm)
-                        6 -> AgentPartnerPanel(agentPartnerVm, ws.id) { activeTab = 0 }
-                        7 -> DeterministicAuditPanel(auditVm, ws.id)
-                        8 -> GitHubEntryScreen(githubVm)
-                        9 -> KnowledgePanel(knowledgeVm, ws.id)
-                        10 -> LspPanel(lspVm, ws.id)
-                        11 -> PluginPanel(pluginRepository, appVersionCode)
-                        12 -> TrainingMirrorPanel(vm)
-                        else -> {
-                            if (openTabs.isNotEmpty()) Row(Modifier.fillMaxWidth().height(32.dp).horizontalScroll(rememberScrollState())) {
-                                openTabs.forEach { tab ->
-                                    Text(tab.title, color = if (tab.id == activeTabId) WorkbenchColors.accent else WorkbenchColors.textSecondary, modifier = Modifier.clickable { vm.selectTab(tab.id) }.padding(8.dp))
+                                .fillMaxHeight()
+                                .width(12.dp)
+                                .pointerInput(Unit) {
+                                    var accumulated = 0f
+                                    detectHorizontalDragGestures(
+                                        onDragStart = { accumulated = 0f },
+                                        onDragEnd = { if (accumulated > 24.dp.toPx()) drawerOpen = true }
+                                    ) { _, dragAmount -> accumulated += dragAmount }
                                 }
-                            }
-                            Box(Modifier.weight(1f).fillMaxWidth()) { ActiveDocumentPane(openTabs, activeTabId) }
-                            when (activeTab) {
-                                1 -> ProtocolHistoryPanel(vm)
-                                2 -> ProtocolPanel(vm)
-                                3 -> Column(Modifier.height(430.dp)) {
-                                    if (importMessage.isNotBlank()) Text(importMessage, color = WorkbenchColors.textMuted, modifier = Modifier.padding(8.dp))
-                                    LazyColumn { item { ImportIndexPanel(importRows, vm::retryImport) } }
+                                .pointerInput(Unit) { detectTapGestures { drawerOpen = true } }
+                        ) {
+                            Box(
+                                Modifier
+                                    .align(Alignment.CenterVertically)
+                                    .padding(start = 3.dp)
+                                    .size(6.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(WorkbenchColors.bgSecondary)
+                            )
+                        }
+                    }
+                    Column(Modifier.weight(1f).fillMaxHeight()) {
+                        when (activeTab) {
+                            4 -> AiChatScreen(aiChatVm) { activeTab = 5 }
+                            5 -> AiConfigurationScreen(aiConfigVm, lanModelVm, localModelVm)
+                            6 -> AgentPartnerPanel(agentPartnerVm, ws.id) { activeTab = 0 }
+                            7 -> DeterministicAuditPanel(auditVm, ws.id)
+                            8 -> GitHubEntryScreen(githubVm)
+                            9 -> KnowledgePanel(knowledgeVm, ws.id)
+                            10 -> LspPanel(lspVm, ws.id)
+                            11 -> PluginPanel(pluginRepository, appVersionCode)
+                            12 -> TrainingMirrorPanel(vm)
+                            else -> {
+                                if (openTabs.isNotEmpty()) Row(Modifier.fillMaxWidth().height(32.dp).horizontalScroll(rememberScrollState())) {
+                                    openTabs.forEach { tab ->
+                                        Text(tab.title, color = if (tab.id == activeTabId) WorkbenchColors.accent else WorkbenchColors.textSecondary, modifier = Modifier.clickable { vm.selectTab(tab.id) }.padding(8.dp))
+                                    }
+                                }
+                                Box(Modifier.weight(1f).fillMaxWidth()) { ActiveDocumentPane(openTabs, activeTabId) }
+                                when (activeTab) {
+                                    1 -> ProtocolHistoryPanel(vm)
+                                    2 -> ProtocolPanel(vm)
+                                    3 -> Column(Modifier.height(430.dp)) {
+                                        if (importMessage.isNotBlank()) Text(importMessage, color = WorkbenchColors.textMuted, modifier = Modifier.padding(8.dp))
+                                        LazyColumn { item { ImportIndexPanel(importRows, vm::retryImport) } }
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
-        }
-        // 抽屉遮罩：半透明变暗 + 点按关闭（slide>0 才参与组合，关闭动画结束后彻底消失）
-        if (slide > 0f) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.45f * slide))
-                    .pointerInput(Unit) { detectTapGestures { drawerOpen = false } }
-            )
-            // 抽屉面板：功能页签 + 项目/最近文件/导入并索引；选中页签即切换并收起
-            Column(
-                Modifier
-                    .fillMaxHeight()
-                    .width(drawerWidth)
-                    .offset { IntOffset(((slide - 1f) * drawerWidthPx).roundToInt(), 0) }
-                    .background(WorkbenchColors.bgSecondary)
-                    .pointerInput(Unit) {
-                        var accumulated = 0f
-                        detectHorizontalDragGestures(
-                            onDragStart = { accumulated = 0f },
-                            onDragEnd = { if (accumulated < -32.dp.toPx()) drawerOpen = false }
-                        ) { _, dragAmount -> accumulated += dragAmount }
-                    }
-                    .verticalScroll(rememberScrollState())
-                    .padding(vertical = 12.dp)
-            ) {
-                Text("功能", color = WorkbenchColors.textMuted, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 16.dp, bottom = 6.dp))
-                WorkbenchTabs.forEachIndexed { index, (icon, label) ->
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (index == activeTab) WorkbenchColors.bgSurface else Color.Transparent)
-                            .clickable {
-                                activeTab = index
-                                drawerOpen = false
-                                if (index == 4) aiChatVm.refreshConfiguration()
-                            }
-                            .padding(horizontal = 10.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(icon, fontSize = 16.sp)
-                        Text(label, color = if (index == activeTab) WorkbenchColors.accent else WorkbenchColors.textPrimary, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 10.dp))
-                    }
-                }
-                HorizontalDivider(Modifier.padding(vertical = 10.dp))
-                Text("项目", color = WorkbenchColors.textSecondary, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 16.dp))
-                projects.forEach { Text(it.name, color = WorkbenchColors.textPrimary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
-                Text("最近文件", color = WorkbenchColors.textSecondary, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 16.dp, top = 8.dp))
-                recentFiles.forEach { file ->
-                    Text(
-                        file.name,
-                        color = WorkbenchColors.textPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.fillMaxWidth().clickable { vm.openFile(file.uri, file.name); drawerOpen = false }.padding(horizontal = 16.dp, vertical = 6.dp)
-                    )
-                }
-                TextButton(
-                    onClick = { importLauncher.launch(arrayOf("application/vnd.android.package-archive", "application/zip", "application/x-tar", "application/octet-stream", "application/json", "text/plain", "*/*")) },
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+            // 抽屉遮罩：半透明变暗 + 点按关闭（slide>0 才参与组合，关闭动画结束后彻底消失）
+            if (slide > 0f) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.45f * slide))
+                        .pointerInput(Unit) { detectTapGestures { drawerOpen = false } }
+                )
+                // 抽屉面板：功能页签 + 项目/最近文件/导入并索引；选中页签即切换并收起
+                Column(
+                    Modifier
+                        .fillMaxHeight()
+                        .width(drawerWidth)
+                        .offset { IntOffset(((slide - 1f) * drawerWidthPx).roundToInt(), 0) }
+                        .background(WorkbenchColors.bgSecondary)
+                        .pointerInput(Unit) {
+                            var accumulated = 0f
+                            detectHorizontalDragGestures(
+                                onDragStart = { accumulated = 0f },
+                                onDragEnd = { if (accumulated < -32.dp.toPx()) drawerOpen = false }
+                            ) { _, dragAmount -> accumulated += dragAmount }
+                        }
+                        .verticalScroll(rememberScrollState())
+                        .padding(vertical = 12.dp)
                 ) {
-                    Icon(Icons.Default.FileOpen, null, Modifier.size(16.dp))
-                    Text("导入并索引", modifier = Modifier.padding(start = 6.dp))
+                    Text("功能", color = WorkbenchColors.textMuted, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 16.dp, bottom = 6.dp))
+                    WorkbenchTabs.forEachIndexed { index, (icon, label) ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (index == activeTab) WorkbenchColors.bgSurface else Color.Transparent)
+                                .clickable {
+                                    activeTab = index
+                                    drawerOpen = false
+                                    if (index == 4) aiChatVm.refreshConfiguration()
+                                }
+                                .padding(horizontal = 10.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(icon, fontSize = 16.sp)
+                            Text(label, color = if (index == activeTab) WorkbenchColors.accent else WorkbenchColors.textPrimary, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 10.dp))
+                        }
+                    }
+                    HorizontalDivider(Modifier.padding(vertical = 10.dp))
+                    Text("项目", color = WorkbenchColors.textSecondary, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 16.dp))
+                    projects.forEach { Text(it.name, color = WorkbenchColors.textPrimary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
+                    Text("最近文件", color = WorkbenchColors.textSecondary, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 16.dp, top = 8.dp))
+                    recentFiles.forEach { file ->
+                        Text(
+                            file.name,
+                            color = WorkbenchColors.textPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth().clickable { vm.openFile(file.uri, file.name); drawerOpen = false }.padding(horizontal = 16.dp, vertical = 6.dp)
+                        )
+                    }
+                    TextButton(
+                        onClick = { importLauncher.launch(arrayOf("application/vnd.android.package-archive", "application/zip", "application/x-tar", "application/octet-stream", "application/json", "text/plain", "*/*")) },
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Icon(Icons.Default.FileOpen, null, Modifier.size(16.dp))
+                        Text("导入并索引", modifier = Modifier.padding(start = 6.dp))
+                    }
                 }
             }
         }
