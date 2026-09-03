@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -38,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -85,8 +87,8 @@ fun GitHubScreen(viewModel: GitHubViewModel) {
                     ) {
                         IconButton(onClick = viewModel::closeFile) { Icon(Icons.Default.ArrowBack, "返回目录") }
                         Column(Modifier.weight(1f)) {
-                            Text(file.path, color = WorkbenchColors.textPrimary)
-                            Text("SHA ${file.sha} · ${file.size} bytes", color = WorkbenchColors.textMuted)
+                            Text(file.path, color = WorkbenchColors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text("SHA ${file.sha} · ${file.size} bytes", color = WorkbenchColors.textMuted, maxLines = 1)
                         }
                     }
                     Text(
@@ -107,28 +109,38 @@ fun GitHubScreen(viewModel: GitHubViewModel) {
 @Composable
 private fun RepositoryList(state: GitHubUiState, viewModel: GitHubViewModel) {
     LaunchedEffect(Unit) { viewModel.refreshClones() }
+    // 2026-09-03 用户反馈：登录后看不到仓库名字、内容太靠下。
+    // 根因：克隆管理区原先放在列表上方，条目一多就把账号标题和仓库列表整体往下顶出屏幕。
+    // 修法：标题区固定顶部且窄栏自适应（按钮换行、文字省略号），克隆区并入 LazyColumn 头部随列表滚动。
     Column(Modifier.fillMaxSize().padding(12.dp)) {
-        if (state.clones.isNotEmpty()) CloneManagementSection(state, viewModel)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("GitHub · ${state.account?.login}", style = MaterialTheme.typography.titleLarge, color = WorkbenchColors.textPrimary)
-                Text("${state.repositories.size} 个仓库（第 1 页）", color = WorkbenchColors.textMuted)
+        Column(Modifier.fillMaxWidth()) {
+            Text(
+                "GitHub · ${state.account?.login ?: "未登录"}",
+                style = MaterialTheme.typography.titleMedium,
+                color = WorkbenchColors.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text("${state.repositories.size} 个仓库（第 1 页）", color = WorkbenchColors.textMuted, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = viewModel::refreshAccountAndRepositories) { Text("刷新") }
+                TextButton(onClick = viewModel::logout) { Text("退出") }
             }
-            TextButton(onClick = viewModel::refreshAccountAndRepositories) { Text("刷新") }
-            TextButton(onClick = viewModel::logout) { Text("退出") }
         }
-        state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        if (state.loading) CircularProgressIndicator()
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        state.error?.let { Text(it, color = MaterialTheme.colorScheme.error, maxLines = 3, overflow = TextOverflow.Ellipsis) }
+        if (state.loading) CircularProgressIndicator(Modifier.padding(vertical = 4.dp).size(20.dp))
+        LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (state.clones.isNotEmpty()) item(key = "clones-header") { CloneManagementSection(state, viewModel) }
             items(state.repositories, key = { it.id }) { repository ->
                 Column(
                     Modifier.fillMaxWidth().clickable { viewModel.openRepository(repository) }.padding(10.dp)
                 ) {
-                    Text("${repository.owner}/${repository.name}", color = WorkbenchColors.textPrimary)
+                    Text("${repository.owner}/${repository.name}", color = WorkbenchColors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(
                         "${if (repository.isPrivate) "私有" else "公开"} · ${repository.defaultBranch}${repository.description?.let { " · $it" }.orEmpty()}",
                         color = WorkbenchColors.textMuted,
-                        maxLines = 2
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
@@ -143,13 +155,13 @@ private fun RepositoryBrowser(state: GitHubUiState, viewModel: GitHubViewModel) 
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = viewModel::closeRepository) { Icon(Icons.Default.ArrowBack, "返回仓库列表") }
             Column(Modifier.weight(1f)) {
-                Text("${repository.owner}/${repository.name}", color = WorkbenchColors.textPrimary)
-                Text("${state.ref}:${if (state.path.isEmpty()) "/" else state.path}", color = WorkbenchColors.textMuted)
+                Text("${repository.owner}/${repository.name}", color = WorkbenchColors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("${state.ref}:${if (state.path.isEmpty()) "/" else state.path}", color = WorkbenchColors.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             if (state.path.isNotEmpty()) TextButton(onClick = viewModel::goUp) { Text("上一级") }
         }
-        state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        if (state.loading) CircularProgressIndicator()
+        state.error?.let { Text(it, color = MaterialTheme.colorScheme.error, maxLines = 3, overflow = TextOverflow.Ellipsis) }
+        if (state.loading) CircularProgressIndicator(Modifier.padding(vertical = 4.dp).size(20.dp))
         Spacer(Modifier.height(4.dp))
         LazyColumn(Modifier.weight(1f)) {
             items(state.directory, key = { it.path }) { entry -> RepositoryEntry(entry, viewModel) }
@@ -170,7 +182,7 @@ private fun RepositoryEntry(entry: GitContent, viewModel: GitHubViewModel) {
             contentDescription = null,
             tint = if (entry.type == "dir") WorkbenchColors.accent else WorkbenchColors.textSecondary
         )
-        Text(entry.path.substringAfterLast('/'), Modifier.padding(start = 8.dp).weight(1f), color = WorkbenchColors.textPrimary)
+        Text(entry.path.substringAfterLast('/'), Modifier.padding(start = 8.dp).weight(1f), color = WorkbenchColors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         if (entry.type != "dir") Text("${entry.size} B", color = WorkbenchColors.textMuted)
     }
 }
@@ -187,7 +199,9 @@ private fun CloneManagementSection(state: GitHubUiState, viewModel: GitHubViewMo
             Text(
                 "已克隆仓库 ${state.clones.size} 个 · 共 ${state.clones.sumOf { it.totalBytes } / 1024} KB",
                 color = WorkbenchColors.textSecondary,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
             Text(if (expanded) "收起" else "展开", color = WorkbenchColors.textMuted, fontSize = 12.sp)
         }
@@ -198,11 +212,13 @@ private fun CloneManagementSection(state: GitHubUiState, viewModel: GitHubViewMo
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text(clone.ownerRepo.replace("__", "/"), color = WorkbenchColors.textPrimary, fontSize = 14.sp)
+                        Text(clone.ownerRepo.replace("__", "/"), color = WorkbenchColors.textPrimary, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(
                             "ref: ${clone.refs.joinToString(", ").ifBlank { "-" }} · ${clone.fileCount} 个文件 · ${clone.totalBytes / 1024} KB",
                             color = WorkbenchColors.textMuted,
-                            fontSize = 12.sp
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                     TextButton(
